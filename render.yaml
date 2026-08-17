@@ -1,0 +1,21 @@
+# Render deployment blueprint for the AI Trading Guardian.
+# Render reads this file automatically when you create the service from GitHub.
+services:
+  - type: web
+    name: ai-trading-guardian
+    runtime: python
+    plan: starter            # ~$7/mo, always-on. Use "free" to try (it sleeps).
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python trading_bot/main.py"
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHONPATH
+        value: "."
+      - key: GUARDIAN_PASSWORD
+        sync: false          # you set this secret in the Render dashboard
+      - key: GUARDIAN_SECRET
+        generateValue: true  # Render generates a random signing secret
+      # --- Optional: set these in the Render dashboard when you're ready ---
+      # ALPACA_API_KEY_ID      (your Alpaca key)
+      # ALPACA_API_SECRET_KEY  (your Alpaca secret)
+      # GUARDIAN_TRADING_MODE  ("sim" or "paper"; leave off "live" until ready)
