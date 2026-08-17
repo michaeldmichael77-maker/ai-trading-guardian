@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WeBull • AI Trading Guardian</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  .header { background: #161b22; padding: 12px 20px; border-bottom: 1px solid #30363d; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 1.4rem; color: #58a6ff; }
+  .main-container { display: grid; grid-template-columns: 280px 1fr 320px; gap: 16px; padding: 16px; max-width: 1600px; margin: 0 auto; }
+  .panel { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; }
+  .panel h3 { font-size: 0.95rem; color: #8b949e; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #30363d; }
+  .symbol-select { width: 100%; padding: 10px; background: #0d1117; border: 1px solid #30363d; color: #e6edf3; border-radius: 6px; font-size: 1rem; }
+  .chart-container { height: 420px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; padding: 12px; }
+  .control-btn { width: 100%; padding: 14px; font-size: 1rem; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; }
+  .btn-start { background: #238636; color: white; }
+  .btn-kill { background: #da3633; color: white; font-weight: 700; }
+  .stat-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #30363d; }
+  .stat-label { color: #8b949e; }
+  .stat-value { font-weight: 600; font-family: monospace; }
+  .positive { color: #3fb950; }
+  .negative { color: #f85149; }
+  .status-bar { padding: 8px 12px; background: #21262d; border-radius: 6px; margin-bottom: 12px; font-size: 0.9rem; }
+  .log-box { height: 180px; overflow-y: auto; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 0.75rem; }
+  .watchlist-item { padding: 6px; cursor: pointer; }
+  .watchlist-item:hover { background: #21262d; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>WeBull <span style="color:#8b949e; font-size:1rem;">• AI Guardian</span></h1>
+  </div>
+  <div style="display:flex; gap:12px; align-items:center;">
+    <button class="control-btn btn-start" onclick="startTradingDay()" style="width:auto; padding:10px 24px;">START TRADING DAY</button>
+    <button class="control-btn btn-kill" onclick="emergencyKillSwitch()" style="width:auto; padding:10px 24px;">KILL SWITCH</button>
+  </div>
+</div>
+
+<div class="main-container">
+
+  <div class="panel">
+    <h3>Market</h3>
+    <select id="symbol-select" class="symbol-select" onchange="changeSymbol()">
+      <option>BTCUSD</option><option>ETHUSD</option><option>SOLUSD</option><option>AVAXUSD</option>
+      <option>AAPL</option><option>TSLA</option><option>NVDA</option><option>GOOGL</option>
+      <option>MSFT</option><option>AMZN</option><option>META</option><option>AMD</option>
+      <option>QQQ</option><option>SPY</option><option>IWM</option><option>TQQQ</option>
+      <option>/ES</option><option>/NQ</option><option>/CL</option><option>/GC</option>
+    </select>
+
+    <div style="margin-top:20px;">
+      <h3>Watchlist</h3>
+      <div id="watchlist">
+        <div class="watchlist-item" onclick="selectSymbol('BTCUSD')">BTCUSD</div>
+        <div class="watchlist-item" onclick="selectSymbol('ETHUSD')">ETHUSD</div>
+        <div class="watchlist-item" onclick="selectSymbol('AAPL')">AAPL</div>
+        <div class="watchlist-item" onclick="selectSymbol('TSLA')">TSLA</div>
+        <div class="watchlist-item" onclick="selectSymbol('NVDA')">NVDA</div>
+        <div class="watchlist-item" onclick="selectSymbol('QQQ')">QQQ</div>
+      </div>
+    </div>
+
+    <div style="margin-top:20px;">
+      <h3>Daily Limits</h3>
+      <div class="stat-row"><span class="stat-label">Profit Target</span><span class="stat-value">$7,000</span></div>
+      <div class="stat-row"><span class="stat-label">Loss Limit</span><span class="stat-value">$175</span></div>
+      <div class="stat-row"><span class="stat-label">Per-Trade Stop</span><span class="stat-value">$50</span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3 id="chart-symbol">BTCUSD</h3>
+    <div class="chart-container">
+      <canvas id="candleChart" width="800" height="400"></canvas>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Portfolio</h3>
+    <div class="stat-row"><span class="stat-label">Balance</span><span class="stat-value" id="balance">$100,000.00</span></div>
+    <div class="stat-row"><span class="stat-label">Daily PnL</span><span class="stat-value" id="daily-pnl">$0.00</span></div>
+    <div class="stat-row"><span class="stat-label">Positions</span><span class="stat-value" id="positions">0</span></div>
+
+    <h3 style="margin-top:20px;">Performance</h3>
+    <div class="stat-row"><span class="stat-label">Win Rate</span><span class="stat-value" id="win-rate">0%</span></div>
+    <div class="stat-row"><span class="stat-label">Profit Factor</span><span class="stat-value" id="profit-factor">0.00</span></div>
+    <div class="stat-row"><span class="stat-label">Max Drawdown</span><span class="stat-value" id="max-drawdown">$0.00</span></div>
+
+    <div style="margin-top:20px;">
+      <h3>System Log</h3>
+      <div class="log-box" id="logs"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let currentSymbol = 'BTCUSD';
+  let priceHistory = [];
+  let candleData = [];
+
+  function changeSymbol() {
+    currentSymbol = document.getElementById('symbol-select').value;
+    document.getElementById('chart-symbol').textContent = currentSymbol;
+    candleData = [];
+    priceHistory = [];
+  }
+
+  function selectSymbol(sym) {
+    document.getElementById('symbol-select').value = sym;
+    changeSymbol();
+  }
+
+  function drawCandles(data) {
+    const canvas = document.getElementById('candleChart');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (data.length < 2) return;
+
+    const min = Math.min(...data.map(d => d.low));
+    const max = Math.max(...data.map(d => d.high));
+    const range = max - min || 1;
+    const spacing = canvas.width / data.length;
+    const candleWidth = Math.max(4, spacing * 0.6);
+
+    data.forEach((candle, i) => {
+      const x = (i + 0.5) * spacing;
+      const openY = canvas.height - ((candle.open - min) / range) * canvas.height;
+      const closeY = canvas.height - ((candle.close - min) / range) * canvas.height;
+      const highY = canvas.height - ((candle.high - min) / range) * canvas.height;
+      const lowY = canvas.height - ((candle.low - min) / range) * canvas.height;
+
+      const isGreen = candle.close >= candle.open;
+      ctx.strokeStyle = isGreen ? '#3fb950' : '#f85149';
+      ctx.fillStyle = isGreen ? '#3fb950' : '#f85149';
+
+      ctx.beginPath();
+      ctx.moveTo(x, highY);
+      ctx.lineTo(x, lowY);
+      ctx.stroke();
+
+      const bodyTop = Math.min(openY, closeY);
+      ctx.fillRect(x - candleWidth/2, bodyTop, candleWidth, Math.abs(closeY - openY) || 1);
+    });
+  }
+
+  function updateChart(newPrice) {
+    priceHistory.push(newPrice);
+    if (priceHistory.length > 60) priceHistory.shift();
+
+    if (priceHistory.length >= 5) {
+      const recent = priceHistory.slice(-5);
+      const candle = {
+        open: recent[0],
+        high: Math.max(...recent),
+        low: Math.min(...recent),
+        close: recent[recent.length - 1]
+      };
+      candleData.push(candle);
+      if (candleData.length > 40) candleData.shift();
+    }
+    drawCandles(candleData);
+  }
+
+  async function startTradingDay() {
+    try {
+      const res = await fetch('/start_day', { method: 'POST' });
+      const data = await res.json();
+      alert(data.message);
+      fetchStatus();
+    } catch (error) {
+      alert("Failed to start: " + error);
+    }
+  }
+
+  async function emergencyKillSwitch() {
+    if (!confirm('Activate Emergency Kill Switch?')) return;
+    try {
+      const res = await fetch('/kill_switch', { method: 'POST' });
+      const data = await res.json();
+      alert(data.message);
+      fetchStatus();
+    } catch (error) {
+      alert("Failed to activate: " + error);
+    }
+  }
+
+  async function fetchStatus() {
+    try {
+      const res = await fetch('/status');
+      const data = await res.json();
+      updateUI(data);
+      if (data.prices && data.prices[currentSymbol]) {
+        updateChart(data.prices[currentSymbol]);
+      }
+    } catch (e) {}
+  }
+
+  function updateUI(data) {
+    document.getElementById('balance').textContent = '$' + data.balance;
+    const dpnl = document.getElementById('daily-pnl');
+    dpnl.textContent = '$' + data.daily_pnl;
+    dpnl.className = 'stat-value ' + (data.daily_pnl >= 0 ? 'positive' : 'negative');
+
+    document.getElementById('risk-status').textContent = data.risk_status || 'OK';
+    document.getElementById('paper-mode').textContent = data.paper_trading ? 'PAPER' : 'LIVE';
+
+    const statusEl = document.getElementById('daily-status');
+    if (data.daily_shutdown) {
+      statusEl.textContent = 'DAY ENDED';
+      statusEl.style.background = '#da3633';
+    } else {
+      statusEl.textContent = 'TRADING ACTIVE';
+      statusEl.style.background = '#238636';
+    }
+  }
+
+  setInterval(fetchStatus, 1200);
+  fetchStatus();
+</script>
+
+</body>
+</html>
+```

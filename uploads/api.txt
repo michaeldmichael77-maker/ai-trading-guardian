@@ -1,0 +1,128 @@
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+import uvicorn
+import threading
+import time
+import collections
+
+from trading_bot import config
+from trading_bot.engine.market import MarketSimulator
+from trading_bot.engine.portfolio import Portfolio
+from trading_bot.engine.guardian import Guardian
+from trading_bot.engine.strategy import AIStrategy
+from trading_bot.daily_governor import DailyGovernor, DailyLimits
+from trading_bot.regime_detector import RegimeDetector
+from trading_bot.correlation_heat import PortfolioHeatMonitor
+from trading_bot.multi_timeframe import MultiTimeframeConfirmation
+from trading_bot.drawdown_recovery import DrawdownRecovery
+from trading_bot.news_filter import NewsEventFilter
+from trading_bot.sentiment_overlay import SentimentOverlay
+
+app = FastAPI()
+
+market = MarketSimulator()
+portfolio = Portfolio(balance=config.INITIAL_BALANCE)
+guardian = Guardian(portfolio)
+daily_governor = DailyGovernor(DailyLimits(
+    max_profit=7000.0,
+    max_loss=175.0,
+    per_trade_stop_loss=50.0
+))
+regime_detector = RegimeDetector()
+heat_monitor = PortfolioHeatMonitor()
+mtf = MultiTimeframeConfirmation()
+drawdown_recovery = DrawdownRecovery()
+news_filter = NewsEventFilter()
+sentiment_overlay = SentimentOverlay()
+
+bot_state = {
+    "is_running": False,
+    "daily_governor_active": False,
+    "paper_trading": True,
+    "current_regime": "UNKNOWN",
+    "portfolio_heat": 0.0,
+    "correlation_risk": "LOW",
+    "current_sentiment": 0.0
+}
+
+price_buffers = {symbol: collections.deque(maxlen=100) for symbol in config.SYMBOLS}
+
+def bot_loop():
+    print("=== Trading loop started ===")
+    while True:
+        if bot_state["is_running"] and bot_state["daily_governor_active"]:
+            if not daily_governor.should_continue_trading():
+                bot_state["is_running"] = False
+                print("=== Trading day ended ===")
+                continue
+
+            for symbol in config.SYMBOLS:
+                price = market.get_price(symbol)
+                if price is None:
+                    continue
+
+                price_buffers[symbol].append(price)
+
+                # Regime Detection
+                if len(price_buffers[symbol]) >= 30:
+                    regime = regime_detector.detect_regime(list(price_buffers[symbol]))
+                    bot_state["current_regime"] = regime
+
+                # Multi-Timeframe
+                mtf_result = mtf.check_alignment(list(price_buffers[symbol]))
+
+                if len(price_buffers[symbol]) >= 30:
+                    signal, reason, confidence = AIStrategy().analyze(list(price_buffers[symbol]))
+                    print(f"[{symbol}] {signal} | {reason} | Conf: {confidence:.2f} | Regime: {bot_state['current_regime']}")
+
+                    if mtf_result["aligned"] and signal in ["BUY", "SELL"] and confidence >= 0.60:
+                        pos = portfolio.get_position(symbol)
+                        if signal == "BUY" and pos["size"] == 0:
+                            portfolio.execute_buy(symbol, price, 1)
+                            daily_governor.register_position(symbol, price, 1, "BUY")
+                            print(f"[{symbol}] EXECUTED BUY")
+                        elif signal == "SELL" and pos["size"] > 0:
+                            portfolio.execute_sell(symbol, price, pos["size"])
+                            daily_governor.close_position(symbol)
+                            print(f"[{symbol}] EXECUTED SELL")
+
+            daily_governor.update_pnl(portfolio.balance)
+
+        time.sleep(config.TICK_INTERVAL)
+
+threading.Thread(target=bot_loop, daemon=True).start()
+
+@app.post("/start_day")
+async def start_trading_day():
+    if bot_state["is_running"]:
+        return {"status": "error", "message": "System is already running"}
+    success = daily_governor.start_new_day(portfolio.balance)
+    if not success:
+        return {"status": "error", "message": daily_governor.get_shutdown_reason()}
+    bot_state["is_running"] = True
+    bot_state["daily_governor_active"] = True
+    print("=== Trading day started ===")
+    return {"status": "started", "message": "Hive-Mind trading day has begun"}
+
+@app.post("/kill_switch")
+async def emergency_kill_switch():
+    bot_state["is_running"] = False
+    daily_governor.end_day("Emergency Kill Switch activated")
+    print("=== Kill switch activated ===")
+    return {"status": "killed", "message": "System has been shut down"}
+
+@app.get("/status")
+async def get_status():
+    return {
+        "balance": round(portfolio.balance, 2),
+        "daily_pnl": round(portfolio.daily_pnl, 2),
+        "risk_status": "OK",
+        "paper_trading": bot_state["paper_trading"],
+        "daily_shutdown": not daily_governor.should_continue_trading(),
+        "regime": bot_state["current_regime"]
+    }
+
+app.mount("/static", StaticFiles(directory="trading_bot/static"), name="static")
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
