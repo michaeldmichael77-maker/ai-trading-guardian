@@ -14,6 +14,7 @@ import collections
 import os
 import threading
 import time
+import asyncio
 
 from fastapi import FastAPI, Request, Form
 from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
@@ -490,8 +491,8 @@ def _persist_session(reason):
         log(f"session persist failed: {exc}")
 
 
-def bot_loop():
-    log("Trading loop initialised.")
+async def async_bot_loop():
+    log("High-Frequency Trading Loop initialised.")
     while True:
         try:
             if bot_state["is_running"] and bot_state["daily_governor_active"]:
@@ -505,8 +506,9 @@ def bot_loop():
                         storage.save_weights(hive_mind.weights)
                         log(f"Trading day ended: {reason}")
                     else:
-                        for symbol in config.SYMBOLS:
-                            process_symbol(symbol)
+                        # SPEED UP: Process all symbols concurrently
+                        tasks = [asyncio.to_thread(process_symbol, symbol) for symbol in config.SYMBOLS]
+                        await asyncio.gather(*tasks)
 
                         prices = bot_state["last_prices"]
                         equity = portfolio.update_equity_curve(prices)
@@ -527,7 +529,7 @@ def bot_loop():
                                     "🛑 Daily LOSS limit hit — trading stopped",
                                     f"{reason} Flattened {n} position(s). You are "
                                     f"now in cash and protected. No further losses "
-                                    f"today. Daily P&L: ${daily_governor.current_pnl:,.2f}",
+                                    ftoday. Daily P&L: ${daily_governor.current_pnl:,.2f}",
                                     level="CRITICAL")
                             else:
                                 notifier.notify(
@@ -567,7 +569,7 @@ def bot_loop():
                             storage.record_equity(equity)
                             _last_equity_save = time.time()
 
-                        bot_state["ticks"] += 1
+                bot_state["ticks"] += 1
             else:
                 # Keep prices live for the chart even when idle.
                 for symbol in config.SYMBOLS:
@@ -585,12 +587,24 @@ def bot_loop():
                     _alloc_tick_counter = 0
                     with state_lock:
                         live_allocator.step()
+                        
+            # Smart Refresh: Faster updates when in a position
+            in_pos = len(portfolio.open_positions()) > 0
+            refresh_rate = config.TICK_INTERVAL / 4 if in_pos else config.TICK_INTERVAL
+            await asyncio.sleep(refresh_rate)
+            
         except Exception as exc:  # keep the loop alive no matter what
             log(f"Loop error: {exc}")
-        time.sleep(config.TICK_INTERVAL)
+            await asyncio.sleep(1)
 
 
-threading.Thread(target=bot_loop, daemon=True).start()
+def start_bot_thread():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(async_bot_loop())
+
+
+threading.Thread(target=start_bot_thread, daemon=True).start()
 
 
 # --------------------------------------------------------------------------- #

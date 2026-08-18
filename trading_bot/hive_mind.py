@@ -90,12 +90,25 @@ class HiveMind:
         elif net < -0.12:
             signal = "SELL"
 
-        confidence = min(0.98, 0.5 + abs(net) * 0.9)
-        agree = sum(1 for v in vote_details if v["signal"] == signal and signal != "HOLD")
+        # --- INTELLIGENCE UPGRADE: Consensus Thresholding ---
+        # Only pull the trigger if at least 60% of voters agree in trending 
+        # markets, or 80% in volatile/choppy markets to ensure high-probability wins.
+        agree_count = sum(1 for v in vote_details if v["signal"] == signal and signal != "HOLD")
+        agreement_ratio = agree_count / len(self.voters)
+        min_consensus = 0.8 if regime in ("VOLATILE", "CHOPPY") else 0.6
+        
+        if signal != "HOLD" and agreement_ratio < min_consensus:
+            signal = "HOLD"
+            reason_suffix = f" (Failed Consensus: {agree_count}/{len(self.voters)})"
+        else:
+            reason_suffix = ""
 
+        confidence = min(0.98, 0.5 + abs(net) * 0.9)
+        
         reason = (
-            f"{agree}/{len(self.voters)} agree | regime={regime}"
+            f"{agree_count}/{len(self.voters)} agree | regime={regime}"
             f"{' | MTF✓' if mtf and mtf.get('aligned') else ''}"
+            f"{reason_suffix}"
         )
 
         decision = {
