@@ -5,6 +5,3 @@ pandas-ta
 alpaca-trade-api
 websockets==10.4
 python-multipart
-yarl
-multidict
-propcache

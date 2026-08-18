@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Trading Guardian - Master Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root { --bg: #11141a; --panel: #1a1e26; --accent: #1e88e5; --green: #00ff88; --red: #ff3e3e; --text: #d1d4dc; --border: #2a2e33; }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background: #000; color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+        header { height: 60px; background: #11141a; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid var(--border); }
+        .brand { color: #fff; font-weight: 900; font-size: 1.4rem; margin-right: 10px; }
+        .brand span { color: var(--accent); }
+        .status-pill { padding: 4px 10px; border-radius: 12px; font-size: 0.65rem; font-weight: 900; margin-left: 12px; text-transform: uppercase; }
+        .main-grid { display: grid; grid-template-columns: 280px 1fr 300px; flex: 1; gap: 2px; background: var(--border); overflow: hidden; }
+        .sidebar { background: var(--bg); display: flex; flex-direction: column; overflow-y: auto; }
+        .center-pane { display: flex; flex-direction: column; overflow-y: auto; background: #000; }
+        .card { background: var(--panel); padding: 15px; border-bottom: 1px solid var(--border); }
+        .card-title { font-size: 0.75rem; font-weight: 800; color: #707a8a; text-transform: uppercase; margin-bottom: 15px; display: flex; align-items: center; gap: 8px; }
+        label { display: block; font-size: 0.7rem; color: var(--text-dim); margin-bottom: 6px; }
+        input, select { width: 100%; background: #000; border: 1px solid var(--border); color: #fff; padding: 10px; font-size: 0.85rem; border-radius: 4px; margin-bottom: 15px; }
+        .btn-pro { padding: 12px; border: none; font-weight: 900; border-radius: 4px; cursor: pointer; text-transform: uppercase; font-size: 0.75rem; transition: 0.2s; }
+        .btn-green { background: #22c55e; color: #000; }
+        .btn-red { background: #ef4444; color: #fff; }
+        .btn-blue { background: #1e88e5; color: #fff; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; padding: 20px; background: #11141a; }
+        .big-price { font-size: 2.2rem; font-weight: bold; font-family: monospace; }
+        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); margin-top: 2px; }
+        .stat-item { background: var(--panel); padding: 15px; }
+        .stat-label { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; margin-bottom: 8px; }
+        .stat-val { font-size: 1.1rem; font-weight: 800; color: #fff; }
+        .wl-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #11141a; font-size: 0.8rem; }
+        .bar-bg { height: 10px; background: #000; border-radius: 5px; overflow: hidden; margin: 10px 0; border: 1px solid #333; }
+        .bar-fill { height: 100%; background: #1e88e5; width: 50%; transition: width 0.3s; }
+        .sentiment-bar { height: 6px; background: linear-gradient(90deg, var(--red), #333, var(--green)); border-radius: 3px; margin: 10px 0; }
+        .log-line { font-family: monospace; font-size: 0.7rem; margin-bottom: 4px; border-bottom: 1px solid #111; padding-bottom: 2px; color: #707a8a; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="brand">AI <span>TRADING GUARDIAN</span></div>
+    <div class="status-pill" style="background: rgba(255,255,255,0.1); color: #fff;" id="header-conn">SIM</div>
+    <div class="status-pill" style="background: var(--red); color: #fff;" id="header-status">● DAY ENDED</div>
+    <div style="flex:1"></div>
+    <button class="btn-pro btn-green" onclick="app.toggleBot()">▶ START TRADING DAY</button>
+    <button class="btn-pro" style="background: #333; color: #fff; margin: 0 10px;" onclick="app.toggleBot()">■ END DAY</button>
+    <button class="btn-pro btn-red" onclick="app.killSwitch()">⚠ KILL SWITCH</button>
+</header>
+
+<div class="main-grid">
+    <div class="sidebar">
+        <div class="card">
+            <div class="card-title">🔑 BROKER SETUP (ALPACA)</div>
+            <label>API KEY ID</label><input type="text" id="alp-key">
+            <label>SECRET KEY</label><input type="password" id="alp-secret">
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                <button class="btn-pro btn-green">Save Keys</button>
+                <button class="btn-pro btn-blue" onclick="app.connectAlpaca()">Test Connection</button>
+            </div>
+        </div>
+        <div class="card" style="flex:1;">
+            <div class="card-title">WATCHLIST</div>
+            <div id="watchlist">
+                <div class="wl-row"><span>BTCUSD</span><span style="color:var(--green)" id="wl-btc">--</span></div>
+                <div class="wl-row"><span>ETHUSD</span><span style="color:var(--red)" id="wl-eth">--</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="center-pane">
+        <div class="chart-header">
+            <div style="font-weight:900; font-size: 1.2rem;">MARKET FEED <span style="font-size: 0.6rem; color: var(--text-dim);" id="market-conn-type">SIMULATOR</span></div>
+            <div class="big-price" id="price-main">0.00</div>
+        </div>
+        <div id="chart-container"></div>
+        
+        <div class="pane-header">ACCOUNT</div>
+        <div class="stats-row">
+            <div class="stat-item"><div class="stat-label">Equity</div><div class="stat-val" id="disp-equity">$0.00</div></div>
+            <div class="stat-item"><div class="stat-label">Cash Balance</div><div class="stat-val" id="disp-bal">$0.00</div></div>
+            <div class="stat-item"><div class="stat-label">Daily P&L</div><div class="stat-val" id="disp-pnl">$0.00</div></div>
+            <div class="stat-item"><div class="stat-label">Unrealized</div><div class="stat-val" id="disp-unr">$0.00</div></div>
+        </div>
+
+        <div class="pane-header">PERFORMANCE</div>
+        <div class="stats-row">
+            <div class="stat-item"><div class="stat-label">Win Rate</div><div class="stat-val" id="perf-win">0%</div></div>
+            <div class="stat-item"><div class="stat-label">Trades</div><div class="stat-val" id="perf-trades">0</div></div>
+            <div class="stat-item"><div class="stat-label">Profit Factor</div><div class="stat-val" id="perf-pf">0</div></div>
+            <div class="stat-item"><div class="stat-label">Max DD</div><div class="stat-val" id="perf-dd">$0.00</div></div>
+        </div>
+        
+        <div class="pane-header">SYSTEM LOG</div>
+        <div class="card" style="flex:1; background:#000; overflow-y:auto; font-family:monospace; font-size:0.7rem;" id="log-box"></div>
+    </div>
+
+    <div class="sidebar">
+        <div class="card">
+            <div class="card-title">🧠 HIVE-MIND DECISION</div>
+            <div style="display:flex; justify-content:space-between; font-size: 0.8rem;"><span>Signal</span><span style="font-weight:bold;" id="intel-sig">STANDBY</span></div>
+            <div style="display:flex; justify-content:space-between; font-size: 0.8rem; margin-top:10px;"><span>Confidence</span><span id="intel-conf">50%</span></div>
+            <div class="bar-bg"><div class="bar-fill" id="conf-fill"></div></div>
+        </div>
+        <div class="card">
+            <div class="card-title">📊 SENTIMENT OVERLAY</div>
+            <label>Market Sentiment</label>
+            <div style="text-align:center; font-weight:bold; font-size: 0.7rem;" id="sent-label">NEUTRAL</div>
+            <div class="sentiment-bar"></div>
+            <div style="display:flex; justify-content:space-between; font-size: 0.8rem;"><span>Score</span><span id="sent-score">0.000</span></div>
+        </div>
+        <div class="card">
+            <div class="card-title">⚡ EXECUTION QUALITY</div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                <div><label>Quality</label><div class="stat-val" id="exec-q">100</div></div>
+                <div><label>Avg Slip</label><div class="stat-val" id="exec-slip">0 bps</div></div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-title">⚙️ AUTO OPTIMIZER</div>
+            <div style="font-size: 0.75rem; margin-bottom: 10px;">Runs: <span id="opt-runs">0</span></div>
+            <label>MA_Cross</label>
+            <div class="bar-bg"><div class="bar-fill" style="width: 1.00%;"></div></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    class GuardianPro {
+        constructor() {
+            this.apiBase = window.location.origin;
+            this.chart = null;
+            this.candles = null;
+            this.init();
+        }
+
+        init() {
+            const container = document.getElementById('chart-container');
+            this.chart = LightweightCharts.createChart(container, {
+                layout: { backgroundColor: '#000', textColor: '#d1d4dc', fontSize: 10, fontFamily: 'monospace' },
+                grid: { vertLines: { color: '#111' }, horzLines: { color: '#111' } },
+                timeScale: { timeVisible: true }
+            });
+            this.candles = this.chart.addCandlestickSeries({ upColor: '#00ff88', downColor: '#ff3e3e', borderVisible: false, wickUpColor: '#00ff88', wickDownColor: '#ff3e3e' });
+            this.sync();
+        }
+
+        async sync() {
+            setInterval(async () => {
+                try {
+                    const res = await fetch(`${this.apiBase}/status`);
+                    const d = await res.json();
+                    
+                    document.getElementById('header-conn').innerText = d.connection.toUpperCase();
+                    document.getElementById('header-status').innerText = d.is_running ? "● LIVE" : "● DAY ENDED";
+                    document.getElementById('header-status').style.background = d.is_running ? "var(--green)" : "var(--red)";
+
+                    const mainPrice = d.price;
+                    document.getElementById('price-main').innerText = mainPrice.toLocaleString(undefined, {minimumFractionDigits:3});
+                    document.getElementById('wl-btc').innerText = mainPrice.toFixed(3);
+                    
+                    document.getElementById('disp-equity').innerText = `$${d.equity.toLocaleString()}`;
+                    document.getElementById('disp-bal').innerText = `$${d.balance.toLocaleString()}`;
+                    document.getElementById('disp-pnl').innerText = `$${d.daily_pnl.toFixed(2)}`;
+                    document.getElementById('disp-unr').innerText = `$${d.unrealised_pnl.toFixed(2)}`;
+
+                    document.getElementById('perf-win').innerText = d.performance.win_rate;
+                    document.getElementById('perf-trades').innerText = d.performance.trades;
+                    document.getElementById('intel-sig').innerText = d.signal;
+                    document.getElementById('intel-sig').style.color = d.signal === 'BUY' ? 'var(--green)' : (d.signal === 'SELL' ? 'var(--red)' : '#fff');
+                    
+                    document.getElementById('log-box').innerHTML = d.logs.map(l => `<div class="log-line">${l}</div>`).join('');
+
+                    this.candles.update({
+                        time: Math.floor(Date.now() / 1000),
+                        open: mainPrice, high: mainPrice, low: mainPrice, close: mainPrice
+                    });
+                } catch(e) {}
+            }, 1000);
+        }
+
+        async toggleBot() { await fetch(`${this.apiBase}/toggle`, { method: 'POST' }); }
+        async killSwitch() { await fetch(`${this.apiBase}/kill_switch`, { method: 'POST' }); }
+        async connectAlpaca() {
+            const data = { api_key: document.getElementById('alp-key').value, secret_key: document.getElementById('alp-secret').value };
+            await fetch(`${this.apiBase}/broker/set_keys`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
+            await fetch(`${this.apiBase}/broker/switch?mode=paper`, { method: 'POST' });
+        }
+    }
+    const app = new GuardianPro();
+</script>
+</body>
+</html>
