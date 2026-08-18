@@ -1,34 +1,46 @@
+"""Guardian: real-time risk supervisor sitting in front of the portfolio.
+
+The Guardian is the last line of defence before/while a position is live.  It
+checks per-trade stop-losses, portfolio-level exposure and produces a single
+risk verdict the rest of the system can trust.
+"""
+
 from trading_bot import config
 
+
 class Guardian:
-    """The 'Security Guard' that enforces risk management rules."""
-    def __init__(self, portfolio):
+    def __init__(self, portfolio, per_trade_stop=config.PER_TRADE_STOP_LOSS):
         self.portfolio = portfolio
-        self.is_system_active = True
-        self.reason_for_shutdown = ""
+        self.per_trade_stop = per_trade_stop
+        self.risk_status = "OK"
+        self.alerts = []
 
-    def check_risk_limits(self, current_price: float):
-        if not self.is_system_active:
-            return "STOPPED"
+    def check_per_trade_stops(self, price_map):
+        """Return list of symbols whose loss breached the per-trade stop."""
+        breached = []
+        for symbol, pos in self.portfolio.open_positions().items():
+            price = price_map.get(symbol, pos["avg_price"])
+            loss = (pos["avg_price"] - price) * pos["size"]  # +ve = loss for long
+            if loss >= self.per_trade_stop:
+                breached.append(symbol)
+        return breached
 
-        if self.portfolio.daily_pnl <= -config.DAILY_LOSS_LIMIT:
-            self.is_system_active = False
-            self.reason_for_shutdown = f"Daily Loss Limit reached (${config.DAILY_LOSS_LIMIT})"
-            return "KILL_SWITCH"
+    def assess(self, price_map):
+        """Produce an overall risk verdict for the dashboard."""
+        unrealised = self.portfolio.unrealised_pnl(price_map)
+        open_count = self.portfolio.position_count()
 
-        if self.portfolio.daily_pnl >= config.DAILY_PROFIT_LIMIT:
-            self.is_system_active = False
-            self.reason_for_shutdown = f"Daily Profit Limit reached (${config.DAILY_PROFIT_LIMIT})"
-            return "KILL_SWITCH"
+        status = "OK"
+        if open_count >= config.MAX_OPEN_POSITIONS:
+            status = "ELEVATED"
+        if unrealised <= -(self.per_trade_stop * 2):
+            status = "ELEVATED"
+        if unrealised <= -(config.MAX_DAILY_LOSS * 0.75):
+            status = "HIGH"
 
-        if self.portfolio.position_size > 0:
-            drop_from_peak = self.portfolio.peak_price_during_trade - current_price
-            if drop_from_peak >= config.TRAILING_STOP_DISTANCE:
-                return "TRAILING_STOP_TRIGGERED"
-
-        return "OK"
-
-    def restart_system(self):
-        self.is_system_active = True
-        self.reason_for_shutdown = ""
-        print("System restarted by user.")
+        self.risk_status = status
+        return {
+            "risk_status": status,
+            "unrealised_pnl": round(unrealised, 2),
+            "open_positions": open_count,
+        }
