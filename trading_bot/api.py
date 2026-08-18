@@ -529,7 +529,7 @@ async def async_bot_loop():
                                     "🛑 Daily LOSS limit hit — trading stopped",
                                     f"{reason} Flattened {n} position(s). You are "
                                     f"now in cash and protected. No further losses "
-                                    ftoday. Daily P&L: ${daily_governor.current_pnl:,.2f}",
+                                    f"today. Daily P&L: ${daily_governor.current_pnl:,.2f}",
                                     level="CRITICAL")
                             else:
                                 notifier.notify(
