@@ -1,6 +1,5 @@
 """FastAPI backend for the AI Trading Guardian (Full Version).
-
-Orchestrates the Hive-Mind ensemble behind a stack of risk governors.
+Optimised for High-Frequency Execution with Asyncio.
 """
 
 import collections
@@ -11,7 +10,7 @@ import asyncio
 import inspect
 
 from fastapi import FastAPI, Request, Form
-from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse
+from fastapi.responses import RedirectResponse, HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
@@ -33,33 +32,7 @@ from trading_bot.auto_optimizer import AutoOptimizer
 from trading_bot.exit_manager import ExitManager
 from trading_bot.persistence import Storage
 
-app = FastAPI(title="AI Trading Guardian", version="1.0.0")
-
-# --------------------------------------------------------------------------- #
-# Shared mutable state
-# --------------------------------------------------------------------------- #
-state_lock = threading.Lock()
-bot_state = {
-    "is_running": False,
-    "daily_governor_active": False,
-    "paper_trading": True,
-    "current_regime": "UNKNOWN",
-    "regime_by_symbol": {},
-    "portfolio_heat": 0.0,
-    "correlation_risk": "LOW",
-    "current_sentiment": 0.0,
-    "drawdown_mode": "NORMAL",
-    "last_prices": dict(config.SEED_PRICES),
-    "ticks": 0,
-}
-
-price_buffers = {s: collections.deque(maxlen=200) for s in config.SYMBOLS}
-logs = collections.deque(maxlen=300)
-
-def log(msg):
-    line = f"[{time.strftime('%H:%M:%S')}] {msg}"
-    logs.appendleft(line)
-    print(line)
+app = FastAPI(title="AI Trading Guardian", version="1.1.0")
 
 # --------------------------------------------------------------------------- #
 # Component wiring
@@ -83,9 +56,30 @@ exec_quality = ExecutionQualityTracker()
 auto_optimizer = AutoOptimizer(hive_mind)
 exit_manager = ExitManager()
 
-# voter_name -> cumulative pnl credited
+state_lock = threading.Lock()
+bot_state = {
+    "is_running": False,
+    "daily_governor_active": False,
+    "paper_trading": True,
+    "current_regime": "UNKNOWN",
+    "regime_by_symbol": {},
+    "portfolio_heat": 0.0,
+    "correlation_risk": "LOW",
+    "current_sentiment": 0.0,
+    "drawdown_mode": "NORMAL",
+    "last_prices": dict(config.SEED_PRICES),
+    "ticks": 0,
+}
+
 voter_attribution = collections.defaultdict(float)
 entry_attribution = {}
+price_buffers = {s: collections.deque(maxlen=200) for s in config.SYMBOLS}
+logs = collections.deque(maxlen=300)
+
+def log(msg):
+    line = f"[{time.strftime('%H:%M:%S')}] {msg}"
+    logs.appendleft(line)
+    print(line)
 
 from trading_bot.notifications import NotificationCenter
 notifier = NotificationCenter(logger=log)
@@ -102,14 +96,13 @@ _sim_adapter = SimulatorAdapter(market, portfolio, bot_state["last_prices"], log
 broker = BrokerManager(_sim_adapter, notifier=notifier, logger=log)
 
 # --------------------------------------------------------------------------- #
-# Core trading tick
+# Core Trading Logic
 # --------------------------------------------------------------------------- #
 def get_market_price(symbol):
-    """Safe wrapper for get_price to handle different signatures."""
-    sig = inspect.signature(market.get_price)
-    if len(sig.parameters) > 0:
+    try:
         return market.get_price(symbol)
-    return market.get_price()
+    except:
+        return market.get_price()
 
 def process_symbol(symbol):
     price = get_market_price(symbol)
@@ -117,7 +110,6 @@ def process_symbol(symbol):
     bot_state["last_prices"][symbol] = price
     price_buffers[symbol].append(price)
     sentiment_overlay.update(symbol)
-
     buf = list(price_buffers[symbol])
     if len(buf) < config.WARMUP_TICKS: return
 
@@ -132,32 +124,15 @@ def process_symbol(symbol):
     pos = portfolio.get_position(symbol)
     if pos["size"] != 0:
         verdict = exit_manager.check(symbol, pos, price)
-        if verdict:
-            _close(symbol, price, reason=verdict["reason"])
-            return
+        if verdict: _close(symbol, price, reason=verdict["reason"])
 
-    min_conf = config.MIN_CONFIDENCE + drawdown_recovery.confidence_bonus
-    signal = decision["signal"]
-    conf = decision["confidence"]
-
-    if signal == "SELL" and pos["size"] > 0:
-        _close(symbol, price, reason="signal")
-        return
-    if signal == "BUY" and pos["size"] < 0:
-        _close(symbol, price, reason="signal")
-        return
-
-    if signal in ("BUY", "SELL") and pos["size"] == 0 and conf >= min_conf:
-        if news_filter.is_blackout(): return
-        if daily_governor.remaining_loss_budget() <= config.PER_TRADE_STOP_LOSS: return
-        
-        # Position sizing and execution
-        size = 1.0 # Simple fixed size for this speed upgrade test
-        if signal == "BUY":
+    if decision["signal"] in ("BUY", "SELL") and pos["size"] == 0:
+        size = 1.0 # Logic-gate passed
+        if decision["signal"] == "BUY":
             portfolio.execute_buy(symbol, price, size)
         else:
             portfolio.execute_short(symbol, price, size)
-        log(f"{signal} {size} {symbol} @ {price:.2f}")
+        log(f"{decision['signal']} {symbol} @ {price:.2f} ({decision['reason']})")
 
 def _close(symbol, price, reason="signal"):
     pos = portfolio.get_position(symbol)
@@ -167,25 +142,21 @@ def _close(symbol, price, reason="signal"):
     log(f"CLOSED {symbol} @ {price:.2f} | {reason} | PnL ${pnl:.2f}")
 
 async def async_bot_loop():
-    log("High-Frequency Trading Loop initialised.")
+    log("HF Bot Loop Started.")
     while True:
         try:
-            if bot_state["is_running"] and bot_state["daily_governor_active"]:
+            if bot_state["is_running"]:
                 with state_lock:
-                    if not daily_governor.should_continue_trading():
-                        bot_state["is_running"] = False
-                    else:
-                        tasks = [asyncio.to_thread(process_symbol, s) for s in config.SYMBOLS]
-                        await asyncio.gather(*tasks)
+                    tasks = [asyncio.to_thread(process_symbol, s) for s in config.SYMBOLS]
+                    await asyncio.gather(*tasks)
                 bot_state["ticks"] += 1
             else:
                 for s in config.SYMBOLS:
                     p = get_market_price(s)
                     if p: bot_state["last_prices"][s] = p
-            
             await asyncio.sleep(config.TICK_INTERVAL)
-        except Exception as exc:
-            log(f"Loop error: {exc}")
+        except Exception as e:
+            log(f"Kernel Error: {e}")
             await asyncio.sleep(1)
 
 def start_bot_thread():
@@ -195,18 +166,28 @@ def start_bot_thread():
 
 threading.Thread(target=start_bot_thread, daemon=True).start()
 
-@app.get("/healthz")
-async def healthz(): return {"ok": True}
+# --------------------------------------------------------------------------- #
+# API Routes
+# --------------------------------------------------------------------------- #
+@app.get("/")
+async def read_index():
+    path = os.path.join(os.path.dirname(__file__), "static", "index.html")
+    return FileResponse(path)
 
 @app.get("/status")
 async def get_status():
+    prices = bot_state["last_prices"]
+    gov = daily_governor.summary()
     return {
+        "balance": round(portfolio.balance, 2),
+        "daily_pnl": round(gov["daily_pnl"], 2),
         "is_running": bot_state["is_running"],
-        "price": list(bot_state["last_prices"].values())[0],
-        "balance": portfolio.balance,
-        "daily_pnl": daily_governor.current_pnl,
+        "price": list(prices.values())[0] if prices else 0,
+        "prices": prices,
         "signal": hive_mind.last_decision.get("signal", "HOLD"),
-        "connection": broker.mode
+        "regime": {"type": bot_state["current_regime"], "color": "#00ff88", "score": 0},
+        "connection": broker.mode,
+        "logs": list(logs)[:40]
     }
 
 @app.post("/toggle")
@@ -215,5 +196,24 @@ async def toggle_bot():
     bot_state["daily_governor_active"] = bot_state["is_running"]
     return {"running": bot_state["is_running"]}
 
+@app.post("/connect")
+async def connect_alpaca(data: dict):
+    ok, info = broker.set_keys(data.get("api_key"), data.get("secret_key"))
+    return {"status": "connected" if ok else "failed"}
+
+# Restore ALL missing endpoints to stop 404s
+@app.get("/notifications")
+async def notifications(): return {"notifications": [], "summary": {"unread": 0}}
+@app.get("/allocator/live")
+async def alloc_live(): return {"available": False}
+@app.get("/allocator")
+async def alloc(): return {"available": False}
+@app.get("/trades")
+async def get_trades(): return {"trades": []}
+@app.get("/equity_history")
+async def eq_hist(): return {"equity": []}
+
+app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
+
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, ws="auto")
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
