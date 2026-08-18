@@ -8,7 +8,7 @@ RISK_PROFILES = {
     },
     "BALANCED": {
         "daily_profit_limit": 3500.0,
-        "daily_loss_limit": 150.0,
+        "daily_loss_limit": 75.0,
         "trailing_stop": 50.0,
         "description": "Balanced growth and risk."
     },
@@ -27,6 +27,6 @@ TRAILING_STOP_DISTANCE = RISK_PROFILES["BALANCED"]["trailing_stop"]
 
 # --- TRADING SETTINGS ---
 INITIAL_BALANCE = 100000.00
-SYMBOL = "BTC/ÕSD"
+SYMBOL = "BTC/USD"
 TRADE_AMOUNT = 1.0
 TICK_INTERVAL = 2
