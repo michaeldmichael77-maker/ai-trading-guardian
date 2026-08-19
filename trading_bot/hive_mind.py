@@ -71,6 +71,11 @@ class HiveMind:
             total_weight = 1.0
 
         net = (buy_score - sell_score) / total_weight  # [-1, 1]-ish
+        # Consensus Upgrade (V27)
+        agree_count = sum(1 for v in vote_details if v["signal"] == signal and signal != "HOLD")
+        if agree_count < 3:
+            signal = "HOLD"
+            reason += " (Consensus Failed)"
 
         # Sentiment tilt (soft).
         net += sentiment * 0.10

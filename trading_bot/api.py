@@ -505,7 +505,10 @@ def bot_loop():
                         storage.save_weights(hive_mind.weights)
                         log(f"Trading day ended: {reason}")
                     else:
-                        for symbol in config.SYMBOLS:
+                        import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        executor.map(process_symbol, config.SYMBOLS)
+                    # Original loop was:
                             process_symbol(symbol)
 
                         prices = bot_state["last_prices"]
@@ -570,7 +573,10 @@ def bot_loop():
                         bot_state["ticks"] += 1
             else:
                 # Keep prices live for the chart even when idle.
-                for symbol in config.SYMBOLS:
+                import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        executor.map(process_symbol, config.SYMBOLS)
+                    # Original loop was:
                     p = market.get_price(symbol)
                     if p is not None:
                         bot_state["last_prices"][symbol] = p
