@@ -1,1 +1,510 @@
-404: Not Found
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Trading Guardian — Plug & Play</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0b0d12; color: #e2e8f0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 20px; }
+  header { text-align: center; padding: 24px 0 16px; border-bottom: 1px solid #1f2937; margin-bottom: 20px; }
+  header h1 { font-size: 1.9rem; background: linear-gradient(90deg,#38bdf8,#818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  header p { color: #94a3b8; font-size: 0.95rem; margin-top: 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  .card { background: #11151f; border: 1px solid #1f2937; border-radius: 12px; padding: 18px; }
+  .card h2 { font-size: 0.95rem; color: #cbd5e1; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; letter-spacing: 0.5px; text-transform: uppercase; }
+  .badge { font-size: 0.7rem; padding: 3px 8px; border-radius: 4px; font-weight: 700; text-transform: uppercase; }
+  .bg-green { background: #064e3b; color: #34d399; }
+  .bg-red { background: #450a0a; color: #f87171; }
+  .bg-blue { background: #1e3a8a; color: #60a5fa; }
+  .bg-yellow { background: #422006; color: #facc15; }
+  .bg-gray { background: #1e293b; color: #94a3b8; }
+  .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #1f2937; font-size: 0.92rem; }
+  .row:last-child { border-bottom: none; }
+  .lbl { color: #94a3b8; }
+  .val { font-weight: 700; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace; }
+  .good { color: #34d399; }
+  .bad { color: #f87171; }
+  .btn { width: 100%; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 0.9rem; margin-top: 10px; transition: filter .2s; }
+  .btn:hover { filter: brightness(1.1); }
+  .start { background: #059669; color: #fff; }
+  .stop { background: #dc2626; color: #fff; }
+  .toggle { background: #2563eb; color: #fff; }
+  .action { background: #7c3aed; color: #fff; }
+  .small { background: #334155; color: #e2e8f0; font-size: 0.8rem; padding: 8px; margin-top: 6px; }
+  .profile-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .pbtn { padding: 8px; border: 1px solid #334155; background: #0f1115; color: #94a3b8; border-radius: 6px; cursor: pointer; font-weight: 700; font-size: 0.78rem; }
+  .pbtn.on { background: #2563eb; color: #fff; border-color: #2563eb; }
+  input { width: 100%; padding: 8px; margin-top: 6px; margin-bottom: 10px; background: #0b0d12; border: 1px solid #334155; color: #e2e8f0; border-radius: 6px; font-family: monospace; }
+  label { font-size: 0.82rem; color: #94a3b8; }
+  .logbox { height: 220px; overflow-y: auto; background: #0b0d12; border: 1px solid #1f2937; border-radius: 8px; padding: 10px; font-family: ui-monospace, monospace; font-size: 0.78rem; color: #94a3b8; }
+  .logline { margin-bottom: 3px; }
+  canvas { width: 100%; height: 170px; background: #0b0d12; border: 1px solid #1f2937; border-radius: 8px; }
+  .signal { text-align: center; padding: 14px; border-radius: 10px; font-weight: 800; font-size: 1.15rem; margin: 10px 0 6px; letter-spacing: 1px; }
+  .sig-buy { background: #064e3b; color: #34d399; }
+  .sig-sell { background: #450a0a; color: #f87171; }
+  .sig-hold { background: #1e293b; color: #94a3b8; }
+  .reason { text-align: center; font-size: 0.82rem; color: #94a3b8; margin-bottom: 4px; min-height: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-top: 6px; }
+  th, td { padding: 8px 6px; text-align: left; border-bottom: 1px solid #1f2937; }
+  th { color: #94a3b8; font-weight: 600; }
+  td { font-family: ui-monospace, monospace; }
+  .disclaimer { font-size: 0.75rem; color: #64748b; text-align: center; margin-top: 18px; line-height: 1.5; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>AI Trading Guardian</h1>
+    <p>Autonomous Intelligence + Risk Management — Plug &amp; Play Edition</p>
+  </header>
+
+  <div class="grid">
+    <!-- Controls -->
+    <div class="card">
+      <h2>Control Center</h2>
+      <div class="row"><span class="lbl">Status</span><span class="badge bg-red" id="st-badge">STOPPED</span></div>
+      <div class="row"><span class="lbl">Mode</span><span class="badge bg-blue" id="md-badge">AUTONOMOUS</span></div>
+      <div class="row"><span class="lbl">Data Source</span><span class="badge bg-yellow" id="ds-badge">SIMULATOR</span></div>
+      <div class="row"><span class="lbl">Profile</span><span class="badge bg-blue" id="pf-badge">BALANCED</span></div>
+      <button class="btn start" id="go-btn" onclick="app.toggleSystem()">START SYSTEM</button>
+      <button class="btn toggle" onclick="app.toggleMode()">Switch Auto / Manual</button>
+      <button class="btn small" onclick="app.resetDay()">Reset Daily PnL & History</button>
+    </div>
+
+    <!-- Risk -->
+    <div class="card">
+      <h2>Risk Management</h2>
+      <label>Choose Profile</label>
+      <div class="profile-grid" style="margin-bottom:12px;">
+        <button class="pbtn" id="p-con" onclick="app.setProfile('CONSERVATIVE')">Conservative</button>
+        <button class="pbtn on" id="p-bal" onclick="app.setProfile('BALANCED')">Balanced</button>
+        <button class="pbtn" id="p-agg" onclick="app.setProfile('AGGRESSIVE')">Aggressive</button>
+      </div>
+      <label>Daily Profit Cap ($)</label><input type="number" id="in-profit" value="3500" step="10">
+      <label>Daily Loss Floor ($)</label><input type="number" id="in-loss" value="150" step="10">
+      <label>Trailing Stop ($)</label><input type="number" id="in-trail" value="50" step="5">
+      <button class="btn toggle" onclick="app.applyCustom()">Apply Custom Settings</button>
+    </div>
+
+    <!-- Market -->
+    <div class="card">
+      <h2>Market Intelligence <span class="badge bg-yellow" id="ds-badge2">SIMULATOR</span></h2>
+      <canvas id="chart" width="600" height="170"></canvas>
+      <div id="sig-box" class="signal sig-hold">HOLD</div>
+      <div class="reason" id="sig-reason">Initializing brain...</div>
+      <button class="btn action" onclick="app.toggleDataSource()">Toggle Simulator / Live Crypto</button>
+      <div style="font-size:0.75rem;color:#64748b;margin-top:6px;text-align:center;">
+        Live mode connects to Binance public stream (BTC/USDT). No API key needed.
+      </div>
+    </div>
+
+    <!-- Portfolio -->
+    <div class="card">
+      <h2>Portfolio</h2>
+      <div class="row"><span class="lbl">Balance</span><span class="val" id="bal">$100,000.00</span></div>
+      <div class="row"><span class="lbl">Daily PnL</span><span class="val" id="dpnl">$0.00</span></div>
+      <div class="row"><span class="lbl">Position</span><span class="val" id="pos">0.00</span></div>
+      <div class="row"><span class="lbl">Unrealized</span><span class="val" id="unr">$0.00</span></div>
+      <div class="row"><span class="lbl">Price</span><span class="val" id="price">$0.00</span></div>
+    </div>
+
+    <!-- Logs -->
+    <div class="card" style="grid-column:1/-1">
+      <h2>System Log</h2>
+      <div class="logbox" id="logs"><div class="logline">System ready. Press START to begin.</div></div>
+    </div>
+
+    <!-- History -->
+    <div class="card" style="grid-column:1/-1">
+      <h2>Trade History</h2>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>Time</th><th>Symbol</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Reason</th></tr></thead>
+          <tbody id="hist"><tr><td colspan="6" style="text-align:center;color:#94a3b8">No trades yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    <strong>Disclaimer:</strong> This is a development / simulation tool for educational purposes.<br>
+    It does not constitute financial advice. Past performance does not guarantee future results.<br>
+    If using Live Crypto mode, you are viewing real market data — trades here are still simulated unless connected to a broker API.
+  </div>
+</div>
+
+<script>
+/* ================= INDICATORS ================= */
+const TI = {
+  sma(data, period) {
+    if (data.length < period) return null;
+    const slice = data.slice(-period);
+    return slice.reduce((a,b)=>a+b,0) / period;
+  },
+  ema(data, period) {
+    if (data.length < period) return null;
+    const k = 2 / (period + 1);
+    let emaVal = TI.sma(data.slice(0, period), period);
+    for (let i = period; i < data.length; i++) {
+      emaVal = data[i] * k + emaVal * (1 - k);
+    }
+    return emaVal;
+  },
+  rsi(data, period=14) {
+    if (data.length < period + 1) return null;
+    let gains=0, losses=0;
+    for (let i=1;i<=period;i++){ const ch=data[i]-data[i-1]; if(ch>0)gains+=ch; else losses-=ch; }
+    let avgGain=gains/period, avgLoss=losses/period;
+    for(let i=period+1;i<data.length;i++){
+      const ch=data[i]-data[i-1], g=ch>0?ch:0, l=ch<0?-ch:0;
+      avgGain=(avgGain*(period-1)+g)/period;
+      avgLoss=(avgLoss*(period-1)+l)/period;
+    }
+    if(avgLoss===0) return 100;
+    return 100 - (100/(1+avgGain/avgLoss));
+  },
+  bbands(data, period=20, mult=2) {
+    const sma = TI.sma(data, period);
+    if (sma===null) return null;
+    const slice = data.slice(-period);
+    const mean = slice.reduce((a,b)=>a+b,0)/period;
+    const variance = slice.reduce((a,b)=>a+Math.pow(b-mean,2),0)/period;
+    const std = Math.sqrt(variance);
+    return { upper: sma+mult*std, middle: sma, lower: sma-mult*std };
+  }
+};
+
+/* ================= CLASSES ================= */
+class Portfolio {
+  constructor() {
+    this.balance = 100000; this.pos=0; this.entry=0; this.dailyPnl=0;
+    this.peak=0; this.history=[];
+  }
+  resetDay() { this.dailyPnl=0; this.history=[]; }
+  buy(price, amt) {
+    const cost=price*amt;
+    if(this.balance>=cost){
+      this.balance-=cost; this.pos+=amt; this.entry=price; this.peak=price; return true;
+    }
+    return false;
+  }
+  sell(price, reason) {
+    if(this.pos>0){
+      const rev=price*this.pos; this.balance+=rev;
+      const pnl=(price-this.entry)*this.pos; this.dailyPnl+=pnl;
+      this.history.unshift({sym:'BTC/USD', entry:this.entry, exit:price, pnl, time:new Date().toLocaleString(), reason});
+      if(this.history.length>50) this.history.pop();
+      this.pos=0; this.entry=0; this.peak=0; return pnl;
+    }
+    return 0;
+  }
+  unrealized(price) {
+    if(this.pos>0){
+      const v=(price-this.entry)*this.pos;
+      if(price>this.peak) this.peak=price;
+      return v;
+    }
+    return 0;
+  }
+}
+
+class Guardian {
+  constructor(portfolio) {
+    this.pf=portfolio; this.active=true; this.reason='';
+    this.setProfile('BALANCED');
+  }
+  setProfile(n) {
+    const map={CONSERVATIVE:{pl:500,ll:50,td:20}, BALANCED:{pl:3500,ll:150,td:50}, AGGRESSIVE:{pl:10000,ll:500,td:150}};
+    const s=map[n]; this.pl=s.pl; this.ll=s.ll; this.td=s.td;
+  }
+  setCustom(pl,ll,td){ this.pl=pl; this.ll=ll; this.td=td; }
+  check(price) {
+    if(!this.active) return 'STOPPED';
+    if(this.pf.dailyPnl <= -this.ll){ this.active=false; this.reason=`Daily Loss Limit $${this.ll}`; return 'KILL'; }
+    if(this.pf.dailyPnl >= this.pl){ this.active=false; this.reason=`Daily Profit Limit $${this.pl}`; return 'KILL'; }
+    if(this.pf.pos>0 && (this.pf.peak - price) >= this.td) return 'TRAIL';
+    return 'OK';
+  }
+  reset(){ this.active=true; this.reason=''; }
+}
+
+class Strategy {
+  analyze(prices) {
+    if(prices.length<50) return ['HOLD','Collecting market data...'];
+    const cur=prices[prices.length-1];
+    const rsi=TI.rsi(prices,14);
+    const ema20=TI.ema(prices,20);
+    const bb=TI.bbands(prices,20,2);
+    const ema12=TI.ema(prices,12);
+    const ema26=TI.ema(prices,26);
+    const macdBullish = (ema12!==null && ema26!==null && (ema12-ema26)>0);
+
+    const atLower = bb && cur <= bb.lower;
+    const atUpper = bb && cur >= bb.upper;
+
+    if((rsi<35 || atLower) && cur>ema20 && macdBullish){
+      return ['BUY', `Bullish Convergence: RSI ${rsi.toFixed(1)} + MACD + BB Lower`];
+    }
+    if(rsi>65 || atUpper){
+      return ['SELL', `Bearish Extremes: RSI ${rsi.toFixed(1)} + BB Upper`];
+    }
+    if(!macdBullish && cur<ema20){
+      return ['SELL', 'Trend Reversal: MACD Bearish + Below EMA'];
+    }
+    return ['HOLD', `RSI:${rsi.toFixed(1)} MACD:${macdBullish?'Bull':'Bear'} BB:${atLower?'Lower':atUpper?'Upper':'Mid'}`];
+  }
+}
+
+class Simulator {
+  constructor(start=50000){ this.price=start; }
+  tick(){ this.price*=1+(Math.random()-0.5)*0.002; return Math.round(this.price*100)/100; }
+}
+
+/* ================= APP ================= */
+const App = {
+  pf: new Portfolio(),
+  guard: null,
+  strat: new Strategy(),
+  sim: new Simulator(),
+  ws: null,
+  prices: [],
+  chartBuf: [],
+  running: false,
+  mode: 'AUTONOMOUS',
+  source: 'SIMULATOR',
+  lastPrice: 50000,
+  livePrice: null,
+  timer: null,
+
+  init() {
+    this.guard = new Guardian(this.pf);
+    this.load();
+    this.updateUI();
+    this.log('Ready. Press START to begin.');
+  },
+
+  toggleSystem() {
+    if(this.running){ this.stop(); }
+    else { this.start(); }
+  },
+
+  start() {
+    this.running=true; this.guard.reset();
+    this.updateButtons();
+    this.log('SYSTEM STARTED');
+    if(this.source==='LIVE' && !this.ws) this.connectLive();
+    this.timer = setInterval(()=>this.tick(), 2000);
+  },
+
+  stop() {
+    this.running=false; clearInterval(this.timer); this.timer=null;
+    this.updateButtons();
+    this.log('SYSTEM STOPPED');
+    this.save();
+  },
+
+  toggleMode() {
+    this.mode = this.mode==='AUTONOMOUS'?'MANUAL':'AUTONOMOUS';
+    this.log(`Mode switched to: ${this.mode}`);
+    this.updateUI();
+  },
+
+  toggleDataSource() {
+    if(this.source==='SIMULATOR'){
+      this.source='LIVE'; this.connectLive();
+      this.log('Switched to LIVE Binance Crypto Stream');
+    } else {
+      this.source='SIMULATOR'; this.disconnectLive();
+      this.log('Switched to Market Simulator');
+    }
+    this.updateUI();
+  },
+
+  connectLive() {
+    if(this.ws) return;
+    try {
+      this.ws = new WebSocket('wss://stream.binance.com:9443/ws/btcusdt@trade');
+      this.ws.onmessage = (e) => {
+        const d=JSON.parse(e.data);
+        this.livePrice = parseFloat(d.p);
+      };
+      this.ws.onerror = () => { this.log('Live stream error. Falling back to Simulator.'); this.source='SIMULATOR'; this.disconnectLive(); };
+      this.ws.onclose = () => { this.ws=null; };
+    } catch(err) {
+      this.log('Could not connect live stream. Using Simulator.');
+      this.source='SIMULATOR';
+    }
+  },
+
+  disconnectLive() {
+    if(this.ws){ this.ws.close(); this.ws=null; }
+  },
+
+  tick() {
+    let price;
+    if(this.source==='LIVE' && this.livePrice!==null){
+      price = this.livePrice;
+    } else {
+      price = this.sim.tick();
+    }
+    this.lastPrice = price;
+    this.prices.push(price); if(this.prices.length>120) this.prices.shift();
+    this.chartBuf.push(price); if(this.chartBuf.length>80) this.chartBuf.shift();
+
+    // Guardian
+    const risk = this.guard.check(price);
+    if(risk==='KILL'){
+      this.log(`🛑 KILL SWITCH: ${this.guard.reason}`);
+      this.stop(); return;
+    }
+    if(risk==='TRAIL'){
+      const pnl=this.pf.sell(price,'Trailing Stop');
+      this.log(`📉 TRAILING STOP: Locked in $${pnl.toFixed(2)}`);
+    }
+
+    // Strategy
+    const [sig, reason] = this.strat.analyze(this.prices);
+
+    if(this.running && this.mode==='AUTONOMOUS'){
+      if(sig==='BUY' && this.pf.pos===0){
+        if(this.pf.buy(price,1.0)) this.log(`🚀 AUTO-BUY $${price.toFixed(2)} | ${reason}`);
+      } else if(sig==='SELL' && this.pf.pos>0){
+        const pnl=this.pf.sell(price, reason);
+        this.log(`💰 AUTO-SELL $${price.toFixed(2)} | ${reason} | PnL $${pnl.toFixed(2)}`);
+      }
+    } else if(this.running && this.mode==='MANUAL' && sig!=='HOLD'){
+      this.log(`💡 AI SUGGESTION: ${sig} at $${price.toFixed(2)} — ${reason}`);
+    }
+
+    this.pf.unrealized(price);
+    this.updateUI();
+    this.save();
+  },
+
+  setProfile(n) {
+    this.guard.setProfile(n);
+    const map={CONSERVATIVE:{p:500,l:50,t:20},BALANCED:{p:3500,l:150,t:50},AGGRESSIVE:{p:10000,l:500,t:150}};
+    const s=map[n];
+    document.getElementById('in-profit').value=s.p;
+    document.getElementById('in-loss').value=s.l;
+    document.getElementById('in-trail').value=s.t;
+    ['p-con','p-bal','p-agg'].forEach(id=>document.getElementById(id).classList.remove('on'));
+    document.getElementById('p-'+n.slice(0,3).toLowerCase()).classList.add('on');
+    this.log(`Profile set to ${n}`);
+    this.updateUI();
+  },
+
+  applyCustom() {
+    const p=parseFloat(document.getElementById('in-profit').value);
+    const l=parseFloat(document.getElementById('in-loss').value);
+    const t=parseFloat(document.getElementById('in-trail').value);
+    this.guard.setCustom(p,l,t);
+    ['p-con','p-bal','p-agg'].forEach(id=>document.getElementById(id).classList.remove('on'));
+    this.log('Custom risk settings applied');
+    this.updateUI();
+  },
+
+  resetDay() {
+    this.pf.resetDay();
+    this.guard.reset();
+    this.log('Daily PnL and history cleared.');
+    this.updateUI();
+    this.save();
+  },
+
+  log(msg) {
+    const box=document.getElementById('logs');
+    const line=document.createElement('div'); line.className='logline'; line.textContent=`[${new Date().toLocaleTimeString()}] ${msg}`;
+    box.appendChild(line); box.scrollTop=box.scrollHeight;
+    while(box.children.length>100) box.removeChild(box.firstChild);
+  },
+
+  updateButtons() {
+    const btn=document.getElementById('go-btn');
+    if(this.running){ btn.textContent='STOP SYSTEM'; btn.className='btn stop'; document.getElementById('st-badge').textContent='RUNNING'; document.getElementById('st-badge').className='badge bg-green'; }
+    else { btn.textContent='START SYSTEM'; btn.className='btn start'; document.getElementById('st-badge').textContent='STOPPED'; document.getElementById('st-badge').className='badge bg-red'; }
+    document.getElementById('md-badge').textContent=this.mode;
+    document.getElementById('ds-badge').textContent=this.source;
+    document.getElementById('ds-badge2').textContent=this.source;
+  },
+
+  updateUI() {
+    this.updateButtons();
+    const fmt=n=>(n>=0?'+$':'-$')+Math.abs(n).toFixed(2);
+    document.getElementById('bal').textContent='$'+this.pf.balance.toFixed(2);
+    const dpnl=document.getElementById('dpnl'); dpnl.textContent=fmt(this.pf.dailyPnl); dpnl.className='val '+(this.pf.dailyPnl>=0?'good':'bad');
+    document.getElementById('pos').textContent=this.pf.pos.toFixed(2);
+    const unr=this.pf.unrealized(this.lastPrice);
+    const unrel=document.getElementById('unr'); unrel.textContent=fmt(unr); unrel.className='val '+(unr>=0?'good':'bad');
+    document.getElementById('price').textContent='$'+this.lastPrice.toFixed(2);
+
+    const [sig, reason] = this.strat.analyze(this.prices);
+    const sbox=document.getElementById('sig-box');
+    sbox.textContent=sig;
+    sbox.className='signal sig-'+sig.toLowerCase();
+    document.getElementById('sig-reason').textContent=reason;
+
+    // history table
+    const tbody=document.getElementById('hist');
+    if(this.pf.history.length===0){ tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:#94a3b8">No trades yet</td></tr>'; }
+    else {
+      tbody.innerHTML=this.pf.history.slice(0,10).map(h=>{
+        const c=h.pnl>=0?'good':'bad';
+        return `<tr><td>${h.time}</td><td>${h.sym}</td><td>$${h.entry.toFixed(2)}</td><td>$${h.exit.toFixed(2)}</td><td class="${c}">${fmt(h.pnl)}</td><td>${h.reason}</td></tr>`;
+      }).join('');
+    }
+
+    // chart
+    this.drawChart();
+  },
+
+  drawChart() {
+    const cvs=document.getElementById('chart');
+    const ctx=cvs.getContext('2d');
+    const w=cvs.width, h=cvs.height;
+    ctx.clearRect(0,0,w,h);
+    const d=this.chartBuf; if(d.length<2) return;
+    const min=Math.min(...d)*0.9995, max=Math.max(...d)*1.0005, range=max-min;
+    ctx.beginPath(); ctx.strokeStyle='#38bdf8'; ctx.lineWidth=2;
+    d.forEach((p,i)=>{
+      const x=(i/(d.length-1))*w; const y=h-((p-min)/range)*h;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.closePath();
+    const g=ctx.createLinearGradient(0,0,0,h);
+    g.addColorStop(0,'rgba(56,189,248,0.25)'); g.addColorStop(1,'rgba(56,189,248,0)');
+    ctx.fillStyle=g; ctx.fill();
+  },
+
+  save() {
+    const state={
+      balance:this.pf.balance, pos:this.pf.pos, entry:this.pf.entry,
+      dailyPnl:this.pf.dailyPnl, peak:this.pf.peak, history:this.pf.history,
+      prices:this.prices, chartBuf:this.chartBuf, lastPrice:this.lastPrice,
+      mode:this.mode, source:this.source, running:false
+    };
+    localStorage.setItem('atg_state', JSON.stringify(state));
+  },
+
+  load() {
+    const raw=localStorage.getItem('atg_state');
+    if(!raw) return;
+    try {
+      const s=JSON.parse(raw);
+      this.pf.balance=s.balance||100000; this.pf.pos=s.pos||0; this.pf.entry=s.entry||0;
+      this.pf.dailyPnl=s.dailyPnl||0; this.pf.peak=s.peak||0; this.pf.history=s.history||[];
+      this.prices=s.prices||[]; this.chartBuf=s.chartBuf||[]; this.lastPrice=s.lastPrice||50000;
+      this.mode=s.mode||'AUTONOMOUS'; this.source=s.source||'SIMULATOR';
+    } catch(e){ console.error('Load error',e); }
+  }
+};
+
+const app = App;
+window.addEventListener('load', ()=>App.init());
+</script>
+</body>
+</html>
