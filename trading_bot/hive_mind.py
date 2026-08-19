@@ -71,11 +71,15 @@ class HiveMind:
             total_weight = 1.0
 
         net = (buy_score - sell_score) / total_weight  # [-1, 1]-ish
-        # Consensus Upgrade (V27)
+        # --- INTELLIGENCE UPGRADE: Consensus Thresholding (V27) ---
         agree_count = sum(1 for v in vote_details if v["signal"] == signal and signal != "HOLD")
-        if agree_count < 3:
+        agreement_ratio = agree_count / len(self.voters)
+        min_consensus = 0.8 if regime in ("VOLATILE", "CHOPPY") else 0.6
+        
+        if signal != "HOLD" and agreement_ratio < min_consensus:
             signal = "HOLD"
-            reason += " (Consensus Failed)"
+            reason += f" (Consensus Failed: {agree_count}/{len(self.voters)})"
+
 
         # Sentiment tilt (soft).
         net += sentiment * 0.10

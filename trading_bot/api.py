@@ -506,10 +506,8 @@ def bot_loop():
                         log(f"Trading day ended: {reason}")
                     else:
                         import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        executor.map(process_symbol, config.SYMBOLS)
-                    # Original loop was:
-                            process_symbol(symbol)
+                        with concurrent.futures.ThreadPoolExecutor() as executor:
+                            executor.map(process_symbol, config.SYMBOLS)
 
                         prices = bot_state["last_prices"]
                         equity = portfolio.update_equity_curve(prices)
@@ -573,10 +571,7 @@ def bot_loop():
                         bot_state["ticks"] += 1
             else:
                 # Keep prices live for the chart even when idle.
-                import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        executor.map(process_symbol, config.SYMBOLS)
-                    # Original loop was:
+                for symbol in config.SYMBOLS:
                     p = market.get_price(symbol)
                     if p is not None:
                         bot_state["last_prices"][symbol] = p
