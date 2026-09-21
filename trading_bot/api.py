@@ -687,6 +687,13 @@ async def end_day():
 
 @app.get("/status")
 async def get_status():
+    if broker.is_live():
+        try:
+            acct = broker.adapter.get_account()
+            if acct and "cash" in acct:
+                portfolio.balance = float(acct["cash"])
+        except Exception:
+            pass
     prices = bot_state["last_prices"]
     equity = portfolio.equity(prices)
     unrealised = portfolio.unrealised_pnl(prices)
