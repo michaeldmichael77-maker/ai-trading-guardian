@@ -246,6 +246,8 @@ broker = BrokerManager(_sim_adapter, notifier=notifier, logger=log)
 # Honor the startup trading mode from config/env (defaults to safe "sim").
 if config.TRADING_MODE in ("paper", "live"):
     _ok, _info = broker.switch(config.TRADING_MODE)
+    if _ok and broker.is_live():
+        portfolio.balance = float(_info.get("cash", portfolio.balance) or portfolio.balance)
     if not _ok:
         log(f"Startup broker mode '{config.TRADING_MODE}' not active: "
             f"{_info.get('error')}  (staying on simulator)")
@@ -391,10 +393,20 @@ def process_symbol(symbol):
             fill = exec_quality.record_fill(symbol, price, "BUY")
             portfolio.execute_buy(symbol, fill["fill"], size)
             daily_governor.register_position(symbol, fill["fill"], size, "BUY")
+            if broker.is_live():
+                try:
+                    broker.submit_order(symbol, size, "buy")
+                except Exception as exc:
+                    log(f"Alpaca LIVE BUY {symbol} failed: {exc}")
         else:
             fill = exec_quality.record_fill(symbol, price, "SELL")
             portfolio.execute_short(symbol, fill["fill"], size)
             daily_governor.register_position(symbol, fill["fill"], size, "SELL")
+            if broker.is_live():
+                try:
+                    broker.submit_order(symbol, size, "sell")
+                except Exception as exc:
+                    log(f"Alpaca LIVE SHORT {symbol} failed: {exc}")
         exit_manager.on_open(symbol, risk_dollars=risk_dollars)
         # Remember which voters agreed for attribution at close.
         entry_attribution[symbol] = [
@@ -419,6 +431,11 @@ def _close(symbol, price, reason="signal"):
         # Cover a short: buy back at the (slipped) ask.
         fill = exec_quality.record_fill(symbol, price, "BUY")
         result = portfolio.execute_cover(symbol, fill["fill"], size)
+    if broker.is_live():
+        try:
+            broker.close_position(symbol)
+        except Exception as exc:
+            log(f"Alpaca LIVE close {symbol} failed: {exc}")
     daily_governor.close_position(symbol)
     exit_manager.on_close(symbol)
     pnl = result["pnl"] if result else 0.0
@@ -440,6 +457,11 @@ def flatten_all(reason="flatten"):
     for symbol in list(portfolio.open_positions().keys()):
         _close(symbol, bot_state["last_prices"].get(symbol, 0.0), reason=reason)
         closed += 1
+    if broker.is_live():
+        try:
+            broker.close_all_positions()
+        except Exception as exc:
+            log(f"Alpaca LIVE close_all_positions failed: {exc}")
     return closed
 
 
@@ -567,6 +589,13 @@ def bot_loop():
                         if time.time() - _last_equity_save >= 10:
                             storage.record_equity(equity)
                             _last_equity_save = time.time()
+                            if broker.is_live():
+                                try:
+                                    acct = broker.adapter.get_account()
+                                    if acct and "cash" in acct:
+                                        portfolio.balance = float(acct["cash"])
+                                except Exception:
+                                    pass
 
                         bot_state["ticks"] += 1
             else:
@@ -1027,6 +1056,8 @@ async def broker_switch(mode: str):
                 "message": "Stop trading (End Day / Pause allocator) before "
                            "switching broker mode."}
     ok, info = broker.switch(mode)
+    if ok and broker.is_live():
+        portfolio.balance = float(info.get("cash", portfolio.balance) or portfolio.balance)
     return {"status": "ok" if ok else "error",
             "info": info, "broker": broker.status()}
 

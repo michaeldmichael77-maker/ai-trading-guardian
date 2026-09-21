@@ -35,6 +35,21 @@ class BrokerManager:
     def is_live(self):
         return self.adapter.is_live
 
+    def submit_order(self, symbol, qty, side, order_type="market"):
+        if hasattr(self.adapter, "submit_order"):
+            return self.adapter.submit_order(symbol, qty, side, order_type=order_type)
+        return None
+
+    def close_position(self, symbol):
+        if hasattr(self.adapter, "close_position"):
+            return self.adapter.close_position(symbol)
+        return None
+
+    def close_all_positions(self):
+        if hasattr(self.adapter, "close_all_positions"):
+            return self.adapter.close_all_positions()
+        return 0
+
     def set_keys(self, key_id, secret_key):
         """Store Alpaca keys (entered in the dashboard) for this session.
 

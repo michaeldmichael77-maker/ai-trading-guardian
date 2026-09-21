@@ -131,12 +131,19 @@ class AlpacaAdapter(BrokerAdapter):
     # ------------------------------------------------------------------ #
     def submit_order(self, symbol, qty, side, order_type="market",
                      time_in_force="day"):
+        clean_sym = symbol
+        tif = time_in_force
+        if "/" not in clean_sym and (clean_sym.endswith("USD") or clean_sym.endswith("USDT")):
+            base = clean_sym[:-3] if clean_sym.endswith("USD") else clean_sym[:-4]
+            quote = "USD" if clean_sym.endswith("USD") else "USDT"
+            clean_sym = f"{base}/{quote}"
+            tif = "gtc"
         body = {
-            "symbol": symbol,
+            "symbol": clean_sym,
             "qty": str(qty),
-            "side": side,
+            "side": side.lower(),
             "type": order_type,
-            "time_in_force": time_in_force,
+            "time_in_force": tif,
         }
         order = self._trade("POST", "/orders", body)
         self.logger(f"[{self.name}] order {side} {qty} {symbol} -> "
@@ -151,8 +158,13 @@ class AlpacaAdapter(BrokerAdapter):
         }
 
     def close_position(self, symbol):
+        clean_sym = symbol
+        if "/" not in clean_sym and (clean_sym.endswith("USD") or clean_sym.endswith("USDT")):
+            base = clean_sym[:-3] if clean_sym.endswith("USD") else clean_sym[:-4]
+            quote = "USD" if clean_sym.endswith("USD") else "USDT"
+            clean_sym = f"{base}/{quote}"
         try:
-            res = self._trade("DELETE", f"/positions/{urllib.parse.quote(symbol)}")
+            res = self._trade("DELETE", f"/positions/{urllib.parse.quote(clean_sym, safe='')}")
             return res
         except BrokerError as exc:
             self.logger(f"close_position {symbol} failed: {exc}")
