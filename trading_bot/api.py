@@ -372,12 +372,13 @@ def process_symbol(symbol):
         # Proactive loss-limit guard: don't open new risk if a single per-trade
         # stop could push us past the daily loss limit. Protects the ceiling
         # BEFORE committing capital, not just after.
-        if daily_governor.remaining_loss_budget() <= config.PER_TRADE_STOP_LOSS:
+        equity = portfolio.equity(bot_state["last_prices"])
+        stop_dollars = min(config.PER_TRADE_STOP_LOSS, max(0.50, equity * 0.02))
+        if daily_governor.remaining_loss_budget() <= stop_dollars:
             return
         open_pos = portfolio.open_positions()
-        equity = portfolio.equity(bot_state["last_prices"])
         allowed, why = heat_monitor.can_add_position(
-            open_pos, equity, config.PER_TRADE_STOP_LOSS, symbol
+            open_pos, equity, stop_dollars, symbol
         )
         if not allowed:
             return
@@ -566,9 +567,10 @@ def bot_loop():
 
                         # Risk overlays.
                         guardian.assess(prices)
+                        stop_dollars = min(config.PER_TRADE_STOP_LOSS, max(0.50, equity * 0.02))
                         heat = heat_monitor.compute(
                             portfolio.open_positions(), equity,
-                            config.PER_TRADE_STOP_LOSS,
+                            stop_dollars,
                         )
                         bot_state["portfolio_heat"] = heat["heat_pct"]
                         bot_state["correlation_risk"] = heat["correlation_risk"]
