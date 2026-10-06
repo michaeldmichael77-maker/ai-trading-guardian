@@ -97,8 +97,29 @@ class BrokerManager:
     def switch(self, mode):
         """Switch trading mode. Returns (ok: bool, info: dict)."""
         mode = (mode or "").lower().strip()
-        if mode not in ("sim", "paper", "live"):
+        if mode not in ("sim", "paper", "live", "topstep"):
             return False, {"error": f"Unknown mode '{mode}'."}
+
+        if mode == "topstep":
+            from trading_bot.brokers.topstepx import TopstepXAdapter
+            user = getattr(config, "TOPSTEP_USERNAME", "") or "michaeldmichael77@gmail.com"
+            api_key = getattr(config, "TOPSTEP_API_KEY", "") or "FO8HtMuWnGks8mzmEro94FpXA726pJ377RLRSMZc6kM="
+            acct_id = getattr(config, "TOPSTEP_ACCOUNT_ID", None) or 28234001
+            adapter = TopstepXAdapter(user, api_key, account_id=acct_id, logger=self.logger)
+            try:
+                info = adapter.connect()
+            except BrokerError as exc:
+                self.last_error = str(exc)
+                self._alert("❌ Could not connect to TopstepX", str(exc), level="WARNING")
+                return False, {"error": str(exc)}
+            self.adapter = adapter
+            self.mode = "topstep"
+            self.last_error = None
+            self._alert("🏆 TOPSTEP ($50K COMBINE) ACTIVE",
+                        f"Connected to Topstep account {info.get('account_name')} "
+                        f"(${info.get('cash', 50000.0):,.2f}). Real-time micro contract execution active.",
+                        level="SUCCESS")
+            return True, info
 
         if mode == "sim":
             self.adapter = self.sim_adapter

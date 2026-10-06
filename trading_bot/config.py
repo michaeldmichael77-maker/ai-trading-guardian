@@ -167,3 +167,8 @@ ALPACA_API_KEY_ID = _os.environ.get("ALPACA_API_KEY_ID", "")
 ALPACA_API_SECRET_KEY = _os.environ.get("ALPACA_API_SECRET_KEY", "")
 # Extra guard: live trading is refused unless this is explicitly set to "1".
 ALLOW_LIVE_TRADING = _os.environ.get("GUARDIAN_ALLOW_LIVE", "0") == "1"
+
+# TopstepX / ProjectX integration
+TOPSTEP_USERNAME = _os.environ.get("TOPSTEP_USERNAME", "michaeldmichael77@gmail.com")
+TOPSTEP_API_KEY = _os.environ.get("TOPSTEP_API_KEY", "FO8HtMuWnGks8mzmEro94FpXA726pJ377RLRSMZc6kM=")
+TOPSTEP_ACCOUNT_ID = _os.environ.get("TOPSTEP_ACCOUNT_ID", "28234001")
