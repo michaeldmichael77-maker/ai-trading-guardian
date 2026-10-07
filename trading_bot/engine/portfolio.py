@@ -199,6 +199,8 @@ class Portfolio:
     def reset_daily(self):
         self.daily_start_balance = self.balance
         self.daily_pnl = 0.0
+        self.peak_equity = self.balance
+        self.max_drawdown = 0.0
 
     # ------------------------------------------------------------------ #
     # Stats for the UI

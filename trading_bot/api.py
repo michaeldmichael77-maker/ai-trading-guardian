@@ -632,7 +632,14 @@ threading.Thread(target=bot_loop, daemon=True).start()
 async def start_trading_day():
     if bot_state["is_running"]:
         return {"status": "error", "message": "System is already running"}
-    success = daily_governor.start_new_day(portfolio.balance)
+    prices = bot_state["last_prices"]
+    equity = portfolio.equity(prices)
+    portfolio.peak_equity = equity
+    portfolio.max_drawdown = 0.0
+    drawdown_recovery.mode = "NORMAL"
+    drawdown_recovery.risk_multiplier = 1.0
+    drawdown_recovery.confidence_bonus = 0.0
+    success = daily_governor.start_new_day(equity)
     if not success:
         return {"status": "error", "message": daily_governor.get_shutdown_reason()}
     portfolio.reset_daily()
@@ -715,10 +722,14 @@ async def get_status():
             "side": pos["side"],
         })
 
+    if not bot_state["is_running"] and not daily_governor.active:
+        if equity >= portfolio.balance * 0.98:
+            bot_state["drawdown_mode"] = "NORMAL"
+    pnl_display = round(gov["daily_pnl"], 2) if (bot_state["is_running"] or daily_governor.active) else 0.0
     return {
         "balance": round(portfolio.balance, 2),
         "equity": round(equity, 2),
-        "daily_pnl": round(gov["daily_pnl"], 2),
+        "daily_pnl": pnl_display,
         "unrealised_pnl": round(unrealised, 2),
         "paper_trading": not broker.adapter.is_live,
         "broker_mode": broker.mode,
@@ -1066,7 +1077,21 @@ async def broker_switch(mode: str):
                            "switching broker mode."}
     ok, info = broker.switch(mode)
     if ok and broker.is_live():
-        portfolio.balance = float(info.get("cash", portfolio.balance) or portfolio.balance)
+        bal = float(info.get("cash", portfolio.balance) or portfolio.balance)
+        portfolio.balance = bal
+        portfolio.starting_balance = bal
+        portfolio.peak_equity = bal
+        portfolio.max_drawdown = 0.0
+        drawdown_recovery.mode = "NORMAL"
+        drawdown_recovery.risk_multiplier = 1.0
+        drawdown_recovery.confidence_bonus = 0.0
+        if mode == "topstep":
+            daily_governor.limits.max_profit = 600.0
+            daily_governor.limits.max_loss = 450.0
+            daily_governor.limits.per_trade_stop_loss = 45.0
+            config.MAX_DAILY_PROFIT = 600.0
+            config.MAX_DAILY_LOSS = 450.0
+            config.PER_TRADE_STOP_LOSS = 45.0
     return {"status": "ok" if ok else "error",
             "info": info, "broker": broker.status()}
 

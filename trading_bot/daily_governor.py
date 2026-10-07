@@ -38,7 +38,7 @@ class DailyGovernor:
         if self.active:
             return False
         self.active = True
-        self.day_start_balance = starting_balance
+        self.day_start_balance = float(starting_balance)
         self.current_pnl = 0.0
         self.shutdown_reason = None
         self.session_start = time.time()
