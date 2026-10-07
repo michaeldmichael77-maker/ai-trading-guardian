@@ -376,6 +376,17 @@ def process_symbol(symbol):
     if signal in ("BUY", "SELL") and pos["size"] == 0 and conf >= min_conf:
         if blackout:
             return
+        # Institutional sniper filters in live mode (prevent fee bleed & chop)
+        if broker.is_live():
+            # 1. Never enter in choppy/ranging markets
+            if regime in ("RANGING", "CHOPPY", "UNKNOWN"):
+                return
+            # 2. Minimum 70% conviction threshold
+            if conf < 0.70:
+                return
+            # 3. Minimum 120s cooldown between trades on the same symbol
+            if (time.time() - _last_symbol_trade.get(symbol, 0)) < 120:
+                return
         # Proactive loss-limit guard: don't open new risk if a single per-trade
         # stop could push us past the daily loss limit. Protects the ceiling
         # BEFORE committing capital, not just after.
@@ -455,6 +466,7 @@ def process_symbol(symbol):
                     broker.submit_order(symbol, size, "sell")
                 except Exception as exc:
                     log(f"Broker LIVE SHORT {symbol} failed: {exc}")
+        _last_symbol_trade[symbol] = time.time()
         exit_manager.on_open(symbol, risk_dollars=risk_dollars)
         # Remember which voters agreed for attribution at close.
         entry_attribution[symbol] = [
@@ -500,6 +512,7 @@ def _close(symbol, price, reason="signal"):
             broker.close_position(symbol)
         except Exception as exc:
             log(f"Broker LIVE close {symbol} failed: {exc}")
+    _last_symbol_trade[symbol] = time.time()
     daily_governor.close_position(symbol)
     exit_manager.on_close(symbol)
     pnl = result["pnl"] if result else 0.0
@@ -531,6 +544,7 @@ def flatten_all(reason="flatten"):
 
 # Track which limit alerts we've already sent today (avoid duplicate emails).
 _alerted = {"approach_loss": False, "approach_profit": False}
+_last_symbol_trade = {}
 
 
 def _check_approach_alerts():
