@@ -256,6 +256,13 @@ if config.TRADING_MODE in ("paper", "live"):
 # --------------------------------------------------------------------------- #
 # Position sizing
 # --------------------------------------------------------------------------- #
+def get_current_equity(prices=None):
+    prices = prices or bot_state["last_prices"]
+    if broker.is_live():
+        return round(portfolio.balance + portfolio.unrealised_pnl(prices), 2)
+    return round(portfolio.equity(prices), 2)
+
+
 def position_size_and_risk(symbol, price, confidence, risk_multiplier):
     """Volatility-based sizing. Returns (units, risk_dollars).
 
@@ -264,7 +271,7 @@ def position_size_and_risk(symbol, price, confidence, risk_multiplier):
     max-position notional and a worst-case overnight-gap tail-risk limit. This
     is what keeps real-data losses bounded (no more $800 hits on a $50 stop).
     """
-    equity = portfolio.equity(bot_state["last_prices"])
+    equity = get_current_equity()
     if config.USE_VOL_SIZING:
         from trading_bot.volatility import expected_move
         move = expected_move(list(price_buffers[symbol]), price,
@@ -308,7 +315,7 @@ def buying_power_ok(symbol, price, size):
     exposure, so we measure total |notional| against equity * MAX_GROSS_LEVERAGE.
     """
     prices = bot_state["last_prices"]
-    equity = portfolio.equity(prices)
+    equity = get_current_equity(prices)
     if equity <= 0:
         return False
     projected_gross = portfolio.gross_exposure(prices) + abs(size) * price
@@ -392,22 +399,62 @@ def process_symbol(symbol):
             return
         if signal == "BUY":
             fill = exec_quality.record_fill(symbol, price, "BUY")
-            portfolio.execute_buy(symbol, fill["fill"], size)
+            if not broker.is_live():
+                portfolio.execute_buy(symbol, fill["fill"], size)
+            else:
+                pos = portfolio.get_position(symbol)
+                if pos["size"] == 0:
+                    portfolio.positions[symbol] = {
+                        "size": size,
+                        "avg_price": fill["fill"],
+                        "side": "LONG",
+                        "entry_time": time.time(),
+                    }
+                else:
+                    cur = pos["size"]
+                    total = cur + size
+                    new_avg = (pos["avg_price"] * cur + fill["fill"] * size) / total
+                    portfolio.positions[symbol] = {
+                        "size": total,
+                        "avg_price": new_avg,
+                        "side": "LONG",
+                        "entry_time": pos["entry_time"],
+                    }
             daily_governor.register_position(symbol, fill["fill"], size, "BUY")
             if broker.is_live():
                 try:
                     broker.submit_order(symbol, size, "buy")
                 except Exception as exc:
-                    log(f"Alpaca LIVE BUY {symbol} failed: {exc}")
+                    log(f"Broker LIVE BUY {symbol} failed: {exc}")
         else:
             fill = exec_quality.record_fill(symbol, price, "SELL")
-            portfolio.execute_short(symbol, fill["fill"], size)
+            if not broker.is_live():
+                portfolio.execute_short(symbol, fill["fill"], size)
+            else:
+                pos = portfolio.get_position(symbol)
+                if pos["size"] == 0:
+                    portfolio.positions[symbol] = {
+                        "size": -size,
+                        "avg_price": fill["fill"],
+                        "side": "SHORT",
+                        "entry_time": time.time(),
+                    }
+                elif pos["size"] < 0:
+                    cur = abs(pos["size"])
+                    total = cur + size
+                    new_avg = (pos["avg_price"] * cur + fill["fill"] * size) / total
+                    portfolio.positions[symbol] = {
+                        "size": -total,
+                        "avg_price": new_avg,
+                        "side": "SHORT",
+                        "entry_time": pos["entry_time"],
+                    }
             daily_governor.register_position(symbol, fill["fill"], size, "SELL")
             if broker.is_live():
                 try:
                     broker.submit_order(symbol, size, "sell")
                 except Exception as exc:
-                    log(f"Alpaca LIVE SHORT {symbol} failed: {exc}")
+                    log(f"Broker LIVE SHORT {symbol} failed: {exc}")
         exit_manager.on_open(symbol, risk_dollars=risk_dollars)
         # Remember which voters agreed for attribution at close.
         entry_attribution[symbol] = [
@@ -424,19 +471,35 @@ def _close(symbol, price, reason="signal"):
         return
     entry_price = pos["avg_price"]
     size = abs(pos["size"])
-    if pos["size"] > 0:
-        # Close a long: sell at the (slipped) bid.
-        fill = exec_quality.record_fill(symbol, price, "SELL")
-        result = portfolio.execute_sell(symbol, fill["fill"], pos["size"])
+    if not broker.is_live():
+        if pos["size"] > 0:
+            fill = exec_quality.record_fill(symbol, price, "SELL")
+            result = portfolio.execute_sell(symbol, fill["fill"], pos["size"])
+        else:
+            fill = exec_quality.record_fill(symbol, price, "BUY")
+            result = portfolio.execute_cover(symbol, fill["fill"], size)
     else:
-        # Cover a short: buy back at the (slipped) ask.
-        fill = exec_quality.record_fill(symbol, price, "BUY")
-        result = portfolio.execute_cover(symbol, fill["fill"], size)
+        fill = exec_quality.record_fill(symbol, price, "SELL" if pos["size"] > 0 else "BUY")
+        pnl = (fill["fill"] - entry_price) * pos["size"]
+        portfolio.balance += pnl
+        portfolio.daily_pnl += pnl
+        portfolio.positions.pop(symbol, None)
+        portfolio.closed_trades.append({
+            "symbol": symbol,
+            "entry_price": entry_price,
+            "exit_price": fill["fill"],
+            "size": size,
+            "pnl": pnl,
+            "reason": reason,
+            "timestamp": time.time(),
+        })
+        result = {"pnl": pnl}
+
     if broker.is_live():
         try:
             broker.close_position(symbol)
         except Exception as exc:
-            log(f"Alpaca LIVE close {symbol} failed: {exc}")
+            log(f"Broker LIVE close {symbol} failed: {exc}")
     daily_governor.close_position(symbol)
     exit_manager.on_close(symbol)
     pnl = result["pnl"] if result else 0.0
@@ -533,7 +596,15 @@ def bot_loop():
                             executor.map(process_symbol, config.SYMBOLS)
 
                         prices = bot_state["last_prices"]
-                        equity = portfolio.update_equity_curve(prices)
+                        if broker.is_live():
+                            equity = round(portfolio.balance + portfolio.unrealised_pnl(prices), 2)
+                            if equity > portfolio.peak_equity:
+                                portfolio.peak_equity = equity
+                            dd = portfolio.peak_equity - equity
+                            if dd > portfolio.max_drawdown:
+                                portfolio.max_drawdown = dd
+                        else:
+                            equity = portfolio.update_equity_curve(prices)
                         # Daily P&L is mark-to-market equity vs the day's
                         # starting equity (cash already nets realised P&L).
                         verdict = daily_governor.update_pnl(equity)
@@ -633,7 +704,7 @@ async def start_trading_day():
     if bot_state["is_running"]:
         return {"status": "error", "message": "System is already running"}
     prices = bot_state["last_prices"]
-    equity = portfolio.equity(prices)
+    equity = get_current_equity(prices)
     portfolio.peak_equity = equity
     portfolio.max_drawdown = 0.0
     drawdown_recovery.mode = "NORMAL"

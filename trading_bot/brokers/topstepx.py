@@ -196,9 +196,18 @@ class TopstepXAdapter(BrokerAdapter):
     def submit_order(self, symbol: str, qty, side: str, order_type="market", time_in_force="day"):
         self._ensure_token()
         contract_id = self._resolve_contract(symbol)
+
+        # Prevent duplicate positions on the same futures contract
+        open_pos = self.get_positions()
+        if any(p.get("symbol") == contract_id for p in open_pos):
+            self.logger(f"[TopstepX] Contract {contract_id} already open, skipping duplicate entry.")
+            return {"status": "skipped", "reason": "contract_already_open"}
+
+        # Strictly 1 Micro contract per trade for risk management
+        contract_qty = 1
+
         # TopstepX: side 1 = Buy (Bid), 2 = Sell (Ask)
         side_code = 1 if side.lower() in ("buy", "long") else 2
-        contract_qty = max(1, int(round(float(qty)))) if float(qty) >= 1.0 else 1
 
         body = {
             "accountId": self.account_id,
