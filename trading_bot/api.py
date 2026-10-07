@@ -606,8 +606,9 @@ def bot_loop():
                         log(f"Trading day ended: {reason}")
                     else:
                         import concurrent.futures
-                        with concurrent.futures.ThreadPoolExecutor(max_workers=len(config.SYMBOLS)) as executor:
-                            executor.map(process_symbol, config.SYMBOLS)
+                        scan_list = ["/NQ", "/ES", "/GC", "/CL"] if broker.mode == "topstep" else config.SYMBOLS
+                        with concurrent.futures.ThreadPoolExecutor(max_workers=len(scan_list)) as executor:
+                            executor.map(process_symbol, scan_list)
 
                         prices = bot_state["last_prices"]
                         if broker.is_live():
@@ -1172,11 +1173,11 @@ async def broker_switch(mode: str):
         drawdown_recovery.confidence_bonus = 0.0
         if mode == "topstep":
             daily_governor.limits.max_profit = 600.0
-            daily_governor.limits.max_loss = 450.0
-            daily_governor.limits.per_trade_stop_loss = 45.0
+            daily_governor.limits.max_loss = 250.0
+            daily_governor.limits.per_trade_stop_loss = 35.0
             config.MAX_DAILY_PROFIT = 600.0
-            config.MAX_DAILY_LOSS = 450.0
-            config.PER_TRADE_STOP_LOSS = 45.0
+            config.MAX_DAILY_LOSS = 250.0
+            config.PER_TRADE_STOP_LOSS = 35.0
     return {"status": "ok" if ok else "error",
             "info": info, "broker": broker.status()}
 

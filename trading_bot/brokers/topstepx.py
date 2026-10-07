@@ -1,7 +1,7 @@
 """TopstepX / ProjectX Gateway Broker Adapter.
 
 Connects to the official TopstepX REST API (https://api.topstepx.com) to trade
-CME Micro & Mini Futures (MNQ, MES, MCL, MGC) on funded or combine accounts.
+CME Micro Futures (MNQ, MES, MCL, MGC) with automated server-side bracket protection.
 """
 
 import json
@@ -30,7 +30,16 @@ class TopstepXAdapter(BrokerAdapter):
         self.token_expiry = 0
         self.account_id = None
         self.account_name = None
-        self._contracts_cache = {}
+        self._contracts_cache = {
+            "/NQ": "CON.F.US.MNQ.Z26",
+            "MNQ": "CON.F.US.MNQ.Z26",
+            "/ES": "CON.F.US.MES.Z26",
+            "MES": "CON.F.US.MES.Z26",
+            "/GC": "CON.F.US.MGC.Z26",
+            "MGC": "CON.F.US.MGC.Z26",
+            "/CL": "CON.F.US.MCLE.X26",
+            "MCL": "CON.F.US.MCLE.X26",
+        }
         self._account_cache = {}
 
     def _headers(self):
@@ -90,7 +99,6 @@ class TopstepXAdapter(BrokerAdapter):
 
     def connect(self):
         self._ensure_token()
-        # Find active account
         res = self._request("POST", "/api/Account/search", {"onlyActiveAccounts": True})
         accounts = res.get("accounts", [])
         if not accounts:
@@ -146,31 +154,31 @@ class TopstepXAdapter(BrokerAdapter):
 
     def _resolve_contract(self, symbol: str):
         symbol = symbol.upper().strip()
-        # Map common bot tickers to CME Micro contract prefixes
-        mapping = {
-            "BTCUSD": "MNQ",
-            "/NQ": "MNQ",
-            "QQQ": "MNQ",
-            "/ES": "MES",
-            "SPY": "MES",
-            "/GC": "MGC",
-            "GLD": "MGC",
-            "/CL": "MCL",
-        }
-        query = mapping.get(symbol, symbol.replace("/", "").replace("USD", ""))
-        if query in self._contracts_cache:
-            return self._contracts_cache[query]
+        # Direct lookup
+        if symbol in self._contracts_cache:
+            return self._contracts_cache[symbol]
 
-        res = self._request("POST", "/api/Contract/search", {"searchText": query, "live": False})
-        contracts = res.get("contracts", [])
-        if contracts:
-            cid = contracts[0]["id"]
-            self._contracts_cache[query] = cid
-            return cid
-        # Default fallback
-        fallback = "CON.F.US.MNQ.Z26"
-        self._contracts_cache[query] = fallback
-        return fallback
+        mapping = {
+            "BTCUSD": "/NQ",
+            "ETHUSD": "/NQ",
+            "QQQ": "/NQ",
+            "AAPL": "/NQ",
+            "TSLA": "/NQ",
+            "NVDA": "/NQ",
+            "MSFT": "/NQ",
+            "META": "/NQ",
+            "AMD": "/NQ",
+            "TQQQ": "/NQ",
+            "SPY": "/ES",
+            "IWM": "/ES",
+            "/ES": "/ES",
+            "/NQ": "/NQ",
+            "/GC": "/GC",
+            "GLD": "/GC",
+            "/CL": "/CL",
+        }
+        mapped = mapping.get(symbol, "/NQ")
+        return self._contracts_cache.get(mapped, "CON.F.US.MNQ.Z26")
 
     def get_positions(self):
         self._ensure_token()
@@ -197,17 +205,24 @@ class TopstepXAdapter(BrokerAdapter):
         self._ensure_token()
         contract_id = self._resolve_contract(symbol)
 
-        # Prevent duplicate positions on the same futures contract
+        # 1. Duplicate check: Never open more than 1 position per contract
         open_pos = self.get_positions()
         if any(p.get("symbol") == contract_id for p in open_pos):
             self.logger(f"[TopstepX] Contract {contract_id} already open, skipping duplicate entry.")
             return {"status": "skipped", "reason": "contract_already_open"}
 
-        # Strictly 1 Micro contract per trade for risk management
+        # 2. Strict 1-Micro Contract Sizing
         contract_qty = 1
 
-        # TopstepX: side 1 = Buy (Bid), 2 = Sell (Ask)
-        side_code = 1 if side.lower() in ("buy", "long") else 2
+        # 3. ProjectX Enum: 0 = Bid (Buy), 1 = Ask (Sell)
+        is_buy = side.lower() in ("buy", "long")
+        side_code = 0 if is_buy else 1
+
+        # 4. Calibrated brackets for Micro Futures (stop loss & take profit)
+        # MNQ: 24 ticks (6 pts = $12 risk) | 60 ticks (15 pts = $30 reward) -> 2.5 R:R
+        # MES: 16 ticks (4 pts = $20 risk) | 40 ticks (10 pts = $50 reward) -> 2.5 R:R
+        sl_ticks = 24 if "MNQ" in contract_id else 16
+        tp_ticks = 60 if "MNQ" in contract_id else 40
 
         body = {
             "accountId": self.account_id,
@@ -215,9 +230,18 @@ class TopstepXAdapter(BrokerAdapter):
             "type": 2,  # Market order
             "side": side_code,
             "size": contract_qty,
+            "stopLossBracket": {
+                "ticks": sl_ticks,
+                "type": 4,  # Stop
+            },
+            "takeProfitBracket": {
+                "ticks": tp_ticks,
+                "type": 1,  # Limit
+            },
         }
         order = self._request("POST", "/api/Order/place", body)
-        self.logger(f"[TopstepX] Order placed: {side.upper()} {contract_qty} {contract_id} -> {order}")
+        verb = "BUY" if is_buy else "SELL"
+        self.logger(f"[TopstepX] Order placed: {verb} {contract_qty} {contract_id} (SL={sl_ticks}t, TP={tp_ticks}t) -> {order}")
         return {
             "id": order.get("orderId"),
             "symbol": contract_id,
