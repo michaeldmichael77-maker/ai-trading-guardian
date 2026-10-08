@@ -83,8 +83,8 @@ class ExitManager:
 
         # Per-position risk unit (volatility-based when set at entry).
         risk = self.risk_for(symbol)
-
-        pnl = self.unrealised(position, price)
+        mult = getattr(config, "FUTURES_POINT_VALUES", {}).get(symbol, 1.0)
+        pnl = self.unrealised(position, price) * mult
 
         # Track the running peak profit for the trailing stop.
         prev_peak = self._peak.get(symbol, 0.0)

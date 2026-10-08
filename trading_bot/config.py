@@ -172,3 +172,15 @@ ALLOW_LIVE_TRADING = _os.environ.get("GUARDIAN_ALLOW_LIVE", "0") == "1"
 TOPSTEP_USERNAME = _os.environ.get("TOPSTEP_USERNAME", "michaeldmichael77@gmail.com")
 TOPSTEP_API_KEY = _os.environ.get("TOPSTEP_API_KEY", "FO8HtMuWnGks8mzmEro94FpXA726pJ377RLRSMZc6kM=")
 TOPSTEP_ACCOUNT_ID = _os.environ.get("TOPSTEP_ACCOUNT_ID", "28234001")
+
+# Futures contract point values for CME Micro Futures
+FUTURES_POINT_VALUES = {
+    "/NQ": 2.0,   # Micro Nasdaq ($2.00/pt)
+    "MNQ": 2.0,
+    "/ES": 5.0,   # Micro S&P 500 ($5.00/pt)
+    "MES": 5.0,
+    "/GC": 10.0,  # Micro Gold ($10.00/pt)
+    "MGC": 10.0,
+    "/CL": 100.0, # Micro Crude Oil ($100.00/pt)
+    "MCL": 100.0,
+}

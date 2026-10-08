@@ -259,7 +259,12 @@ if config.TRADING_MODE in ("paper", "live"):
 def get_current_equity(prices=None):
     prices = prices or bot_state["last_prices"]
     if broker.is_live():
-        return round(portfolio.balance + portfolio.unrealised_pnl(prices), 2)
+        unrealised = 0.0
+        for s, pos in portfolio.open_positions().items():
+            cur = prices.get(s, pos["avg_price"])
+            mult = config.FUTURES_POINT_VALUES.get(s, 1.0) if broker.mode == "topstep" else 1.0
+            unrealised += (cur - pos["avg_price"]) * pos["size"] * mult
+        return round(portfolio.balance + unrealised, 2)
     return round(portfolio.equity(prices), 2)
 
 
@@ -402,8 +407,12 @@ def process_symbol(symbol):
             return
         if not mtf_result["aligned"]:
             return
-        size, risk_dollars = position_size_and_risk(
-            symbol, price, conf, drawdown_recovery.risk_multiplier)
+        if broker.mode == "topstep":
+            size = 1.0
+            risk_dollars = config.PER_TRADE_STOP_LOSS
+        else:
+            size, risk_dollars = position_size_and_risk(
+                symbol, price, conf, drawdown_recovery.risk_multiplier)
         if size <= 0:
             return
         if not buying_power_ok(symbol, price, size):
@@ -492,7 +501,8 @@ def _close(symbol, price, reason="signal"):
             result = portfolio.execute_cover(symbol, fill["fill"], size)
     else:
         fill = exec_quality.record_fill(symbol, price, "SELL" if pos["size"] > 0 else "BUY")
-        pnl = (fill["fill"] - entry_price) * pos["size"]
+        mult = config.FUTURES_POINT_VALUES.get(symbol, 1.0) if broker.mode == "topstep" else 1.0
+        pnl = round((fill["fill"] - entry_price) * pos["size"] * mult, 2)
         portfolio.balance += pnl
         portfolio.daily_pnl += pnl
         portfolio.positions.pop(symbol, None)
