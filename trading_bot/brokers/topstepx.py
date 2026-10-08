@@ -230,18 +230,10 @@ class TopstepXAdapter(BrokerAdapter):
             "type": 2,  # Market order
             "side": side_code,
             "size": contract_qty,
-            "stopLossBracket": {
-                "ticks": sl_ticks,
-                "type": 4,  # Stop
-            },
-            "takeProfitBracket": {
-                "ticks": tp_ticks,
-                "type": 1,  # Limit
-            },
         }
         order = self._request("POST", "/api/Order/place", body)
         verb = "BUY" if is_buy else "SELL"
-        self.logger(f"[TopstepX] Order placed: {verb} {contract_qty} {contract_id} (SL={sl_ticks}t, TP={tp_ticks}t) -> {order}")
+        self.logger(f"[TopstepX] Order placed: {verb} {contract_qty} {contract_id} -> {order}")
         return {
             "id": order.get("orderId"),
             "symbol": contract_id,
