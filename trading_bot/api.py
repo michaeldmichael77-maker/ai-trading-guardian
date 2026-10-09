@@ -379,12 +379,15 @@ def process_symbol(symbol):
     conf = decision["confidence"]
 
     # Opposite-signal exit (flatten before considering a reversal next tick).
-    if signal == "SELL" and pos["size"] > 0:
-        _close(symbol, price, reason="signal")
-        return
-    if signal == "BUY" and pos["size"] < 0:
-        _close(symbol, price, reason="signal")
-        return
+    # In live mode, DO NOT abort on 1-second micro-tick noise!
+    # Let the position breathe and run to its Stop-Loss, Trailing-Stop, or Take-Profit (+2R = +$70).
+    if not broker.is_live():
+        if signal == "SELL" and pos["size"] > 0:
+            _close(symbol, price, reason="signal")
+            return
+        if signal == "BUY" and pos["size"] < 0:
+            _close(symbol, price, reason="signal")
+            return
 
     # New entry — either a long (BUY) or a short (SELL).
     if signal in ("BUY", "SELL") and pos["size"] == 0 and conf >= min_conf:
