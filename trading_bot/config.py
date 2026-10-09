@@ -41,9 +41,9 @@ MAX_GROSS_LEVERAGE = 1.5     # cap total |notional| (long+short) at 1.5x equity
 # returns; letting profits run under a trailing stop dominated on return,
 # Sharpe, win-rate AND profit-factor. So TP is disabled by default (set >0 to
 # re-enable a hard target).
-TAKE_PROFIT_R = 0.0          # 0 = disabled; let winners run under the trail
+TAKE_PROFIT_R = 2.0          # 0 = disabled; let winners run under the trail
 TRAIL_ACTIVATE_R = 1.0       # arm the trailing stop once profit reaches +1R
-TRAIL_GIVEBACK = 0.5         # exit if profit gives back >50% of its peak
+TRAIL_GIVEBACK = 0.3         # exit if profit gives back >50% of its peak
 
 # ---------------------------------------------------------------------------
 # Volatility-based risk sizing (the real fix for oversized positions).

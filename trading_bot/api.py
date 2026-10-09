@@ -395,11 +395,11 @@ def process_symbol(symbol):
             # 1. Never enter in choppy/ranging markets
             if regime in ("RANGING", "CHOPPY", "UNKNOWN"):
                 return
-            # 2. Minimum 70% conviction threshold
-            if conf < 0.70:
+            # 2. High-conviction threshold (65%+)
+            if conf < 0.65:
                 return
-            # 3. Minimum 120s cooldown between trades on the same symbol
-            if (time.time() - _last_symbol_trade.get(symbol, 0)) < 120:
+            # 3. Minimum 60s cooldown between trades on the same symbol
+            if (time.time() - _last_symbol_trade.get(symbol, 0)) < 60:
                 return
         # Proactive loss-limit guard: don't open new risk if a single per-trade
         # stop could push us past the daily loss limit. Protects the ceiling

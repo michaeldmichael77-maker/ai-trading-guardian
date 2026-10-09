@@ -47,10 +47,10 @@ class RegimeDetector:
         norm_slope = (slope / avg) if avg else 0.0
 
         # High volatility dominates the classification.
-        if vol > 0.004:
+        if vol > 0.008:
             return "VOLATILE"
-        if norm_slope > 0.0006:
+        if norm_slope > 0.00015:
             return "TRENDING_UP"
-        if norm_slope < -0.0006:
+        if norm_slope < -0.00015:
             return "TRENDING_DOWN"
         return "RANGING"
