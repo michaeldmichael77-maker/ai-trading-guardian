@@ -634,7 +634,7 @@ def bot_loop():
 
                         prices = bot_state["last_prices"]
                         if broker.is_live():
-                            equity = round(portfolio.balance + portfolio.unrealised_pnl(prices), 2)
+                            equity = get_current_equity(prices)
                             if equity > portfolio.peak_equity:
                                 portfolio.peak_equity = equity
                             dd = portfolio.peak_equity - equity
