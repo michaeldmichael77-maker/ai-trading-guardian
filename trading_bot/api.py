@@ -136,6 +136,15 @@ def get_active_price(symbol):
     if broker.is_live():
         return _live_market.get_price(symbol)
     return _sim_market.get_price(symbol)
+
+
+def seed_futures_buffers():
+    for s in ["/NQ", "/ES", "/GC", "/CL"]:
+        bars = _live_market.get_bars(s, count=60)
+        if bars:
+            price_buffers[s].clear()
+            price_buffers[s].extend(bars)
+            bot_state["last_prices"][s] = bars[-1]
 guardian = Guardian(portfolio)
 daily_governor = DailyGovernor(DailyLimits(
     max_profit=config.MAX_DAILY_PROFIT,
@@ -344,7 +353,15 @@ def process_symbol(symbol):
     if price is None:
         return
     bot_state["last_prices"][symbol] = price
-    price_buffers[symbol].append(price)
+    if broker.is_live():
+        if len(price_buffers[symbol]) < 30:
+            bars = _live_market.get_bars(symbol, count=60)
+            if bars:
+                price_buffers[symbol].clear()
+                price_buffers[symbol].extend(bars)
+        price_buffers[symbol].append(price)
+    else:
+        price_buffers[symbol].append(price)
     sentiment_overlay.update(symbol)
 
     buf = list(price_buffers[symbol])
@@ -741,6 +758,9 @@ async def start_trading_day():
     if bot_state["is_running"]:
         return {"status": "error", "message": "System is already running"}
     prices = bot_state["last_prices"]
+    if broker.mode == "topstep":
+        seed_futures_buffers()
+        prices = bot_state["last_prices"]
     equity = get_current_equity(prices)
     portfolio.peak_equity = equity
     portfolio.max_drawdown = 0.0
@@ -1200,6 +1220,7 @@ async def broker_switch(mode: str):
             config.MAX_DAILY_PROFIT = 600.0
             config.MAX_DAILY_LOSS = 250.0
             config.PER_TRADE_STOP_LOSS = 35.0
+            seed_futures_buffers()
     return {"status": "ok" if ok else "error",
             "info": info, "broker": broker.status()}
 
