@@ -92,12 +92,14 @@ class HiveMind:
 
         # --- INTELLIGENCE UPGRADE: Consensus Thresholding (V37) ---
         agree_count = sum(1 for v in vote_details if v["signal"] == signal and signal != "HOLD")
+        oppose_count = sum(1 for v in vote_details if v["signal"] not in (signal, "HOLD"))
         agreement_ratio = agree_count / len(self.voters)
-        min_consensus = 0.8 if regime in ("VOLATILE", "CHOPPY") else 0.6
+        min_consensus = 0.6 if regime in ("VOLATILE", "CHOPPY") else 0.4
         failed_consensus = False
-        if signal != "HOLD" and agreement_ratio < min_consensus:
-            signal = "HOLD"
-            failed_consensus = True
+        if signal != "HOLD":
+            if agreement_ratio < min_consensus and not (agree_count >= 2 and oppose_count == 0):
+                signal = "HOLD"
+                failed_consensus = True
 
         confidence = min(0.98, 0.5 + abs(net) * 0.9)
         agree = sum(1 for v in vote_details if v["signal"] == signal and signal != "HOLD")

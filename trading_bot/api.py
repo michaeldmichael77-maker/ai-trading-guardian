@@ -392,8 +392,8 @@ def process_symbol(symbol):
             return
         # Institutional sniper filters in live mode (prevent fee bleed & chop)
         if broker.is_live():
-            # 1. Never enter in choppy/ranging markets
-            if regime in ("RANGING", "CHOPPY", "UNKNOWN"):
+            # 1. Block entries when market is actively choppy
+            if regime == "CHOPPY":
                 return
             # 2. High-conviction threshold (65%+)
             if conf < 0.65:
