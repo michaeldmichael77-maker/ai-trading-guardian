@@ -125,8 +125,17 @@ async def healthz():
 # --------------------------------------------------------------------------- #
 # Component wiring
 # --------------------------------------------------------------------------- #
-market = MarketSimulator()
+from trading_bot.engine.live_feed import LiveMarketFeed
+
+_sim_market = MarketSimulator()
+_live_market = LiveMarketFeed(fallback_sim=_sim_market)
+market = _sim_market
 portfolio = Portfolio(balance=config.INITIAL_BALANCE)
+
+def get_active_price(symbol):
+    if broker.is_live():
+        return _live_market.get_price(symbol)
+    return _sim_market.get_price(symbol)
 guardian = Guardian(portfolio)
 daily_governor = DailyGovernor(DailyLimits(
     max_profit=config.MAX_DAILY_PROFIT,
@@ -331,7 +340,7 @@ def buying_power_ok(symbol, price, size):
 # Core trading tick
 # --------------------------------------------------------------------------- #
 def process_symbol(symbol):
-    price = market.get_price(symbol)
+    price = get_active_price(symbol)
     if price is None:
         return
     bot_state["last_prices"][symbol] = price
@@ -699,7 +708,7 @@ def bot_loop():
             else:
                 # Keep prices live for the chart even when idle.
                 for symbol in config.SYMBOLS:
-                    p = market.get_price(symbol)
+                    p = get_active_price(symbol)
                     if p is not None:
                         bot_state["last_prices"][symbol] = p
                         price_buffers[symbol].append(p)
