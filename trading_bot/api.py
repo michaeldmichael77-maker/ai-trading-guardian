@@ -281,7 +281,11 @@ def get_current_equity(prices=None):
         for s, pos in portfolio.open_positions().items():
             cur = prices.get(s, pos["avg_price"])
             mult = config.FUTURES_POINT_VALUES.get(s, 1.0) if broker.mode == "topstep" else 1.0
-            unrealised += (cur - pos["avg_price"]) * pos["size"] * mult
+            if pos.get("side") == "SHORT":
+                pnl = (pos["avg_price"] - cur) * abs(pos["size"]) * mult
+            else:
+                pnl = (cur - pos["avg_price"]) * pos["size"] * mult
+            unrealised += pnl
         return round(portfolio.balance + unrealised, 2)
     return round(portfolio.equity(prices), 2)
 
@@ -832,8 +836,11 @@ async def get_status():
         except Exception:
             pass
     prices = bot_state["last_prices"]
-    equity = portfolio.equity(prices)
-    unrealised = portfolio.unrealised_pnl(prices)
+    equity = get_current_equity(prices)
+    if broker.mode == "topstep":
+        unrealised = round(equity - portfolio.balance, 2)
+    else:
+        unrealised = portfolio.unrealised_pnl(prices)
     gov = daily_governor.summary()
     stats = portfolio.stats()
 

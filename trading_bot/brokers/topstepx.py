@@ -37,8 +37,8 @@ class TopstepXAdapter(BrokerAdapter):
             "MES": "CON.F.US.MES.Z26",
             "/GC": "CON.F.US.MGC.Z26",
             "MGC": "CON.F.US.MGC.Z26",
-            "/CL": "CON.F.US.MCLE.X26",
-            "MCL": "CON.F.US.MCLE.X26",
+            "/CL": "CON.F.US.MCLE.Z26",
+            "MCL": "CON.F.US.MCLE.Z26",
         }
         self._account_cache = {}
 
