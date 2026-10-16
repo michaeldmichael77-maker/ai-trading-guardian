@@ -909,7 +909,7 @@ async def get_status():
     }
 
 
-@app.get("/history/{symbol}")
+@app.get("/history/{symbol:path}")
 async def history(symbol: str):
     buf = list(price_buffers.get(symbol, []))
     return {"symbol": symbol, "prices": [round(p, 4) for p in buf]}
