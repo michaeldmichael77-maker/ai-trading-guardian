@@ -768,7 +768,77 @@ def bot_loop():
         time.sleep(config.TICK_INTERVAL)
 
 
+def _auto_start_trading_day():
+    if bot_state["is_running"]:
+        return False
+    if broker.mode == "topstep":
+        seed_futures_buffers()
+    prices = bot_state["last_prices"]
+    equity = get_current_equity(prices)
+    portfolio.peak_equity = equity
+    portfolio.max_drawdown = 0.0
+    drawdown_recovery.mode = "NORMAL"
+    drawdown_recovery.risk_multiplier = 1.0
+    drawdown_recovery.confidence_bonus = 0.0
+    success = daily_governor.start_new_day(equity)
+    if success:
+        portfolio.reset_daily()
+        bot_state["is_running"] = True
+        bot_state["daily_governor_active"] = True
+        _alerted["approach_loss"] = False
+        _alerted["approach_profit"] = False
+        log("⏰ [AUTO-TIMER] 9:28 AM EST Market Open: Trading day started automatically.")
+        notifier.notify(
+            "⏰ Automated Trading Day Started",
+            f"The Guardian auto-scheduler initiated the 9:30 AM EST market open session. Equity: ${equity:,.2f}.",
+            level="SUCCESS"
+        )
+        return True
+    return False
+
+
+def _auto_end_trading_day():
+    if not bot_state["is_running"]:
+        return 0
+    bot_state["is_running"] = False
+    bot_state["daily_governor_active"] = False
+    n = flatten_all(reason="AUTO-SCHEDULER 11:30 AM FLATTEN")
+    daily_governor.end_day("Auto-scheduler 11:30 AM cutoff")
+    _persist_session("Auto-scheduler 11:30 AM cutoff")
+    storage.save_weights(hive_mind.weights)
+    log(f"⏹️ [AUTO-TIMER] 11:30 AM EST Morning Session Cutoff reached. Flattened {n} position(s).")
+    notifier.notify(
+        "⏹️ Automated Session Closed",
+        f"11:30 AM EST reached. Flattened {n} position(s). Day locked in to avoid afternoon chop.",
+        level="INFO"
+    )
+    return n
+
+
+def market_scheduler_loop():
+    import zoneinfo
+    ny_tz = zoneinfo.ZoneInfo("America/New_York")
+    while True:
+        try:
+            now_dt = datetime.now(tz=ny_tz)
+            weekday = now_dt.weekday()  # 0=Mon, 4=Fri
+            h = now_dt.hour
+            m = now_dt.minute
+
+            if weekday < 5 and broker.is_live():
+                # 9:28 AM - 9:30 AM EST: Auto-start
+                if h == 9 and 28 <= m < 30 and not bot_state["is_running"] and not daily_governor.active:
+                    _auto_start_trading_day()
+                # 11:30 AM EST onwards: Auto-end if running
+                elif ((h == 11 and m >= 30) or h > 11) and bot_state["is_running"]:
+                    _auto_end_trading_day()
+        except Exception as exc:
+            log(f"Scheduler loop error: {exc}")
+        time.sleep(10)
+
+
 threading.Thread(target=bot_loop, daemon=True).start()
+threading.Thread(target=market_scheduler_loop, daemon=True).start()
 
 
 # --------------------------------------------------------------------------- #
@@ -891,6 +961,8 @@ async def get_status():
         "daily_shutdown": not daily_governor.should_continue_trading(),
         "shutdown_reason": gov["shutdown_reason"],
         "ticks": bot_state["ticks"],
+        "scheduler_active": True,
+        "scheduler_window": "Mon-Fri 9:28 AM - 11:30 AM EST",
 
         # Risk / governance
         "risk_status": guardian.risk_status,
