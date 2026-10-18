@@ -126,6 +126,9 @@ async def healthz():
 # Component wiring
 # --------------------------------------------------------------------------- #
 from trading_bot.engine.live_feed import LiveMarketFeed
+from trading_bot.engine.orb import OpeningRangeBreakout
+
+orb_engine = OpeningRangeBreakout()
 
 _sim_market = MarketSimulator()
 _live_market = LiveMarketFeed(fallback_sim=_sim_market)
@@ -398,6 +401,20 @@ def process_symbol(symbol):
 
     signal = decision["signal"]
     conf = decision["confidence"]
+
+    # When trading Topstep Futures, apply the 15-Minute Opening Range Breakout (ORB)
+    if broker.mode == "topstep" and symbol in ("/NQ", "MNQ", "/ES", "MES"):
+        orb_res = orb_engine.evaluate(price)
+        if orb_res.get("signal") == "FLATTEN" and pos["size"] != 0:
+            _close(symbol, price, reason="ORB 11:30 AM Cutoff")
+            return
+        if orb_res.get("signal") in ("BUY", "SELL"):
+            signal = orb_res["signal"]
+            conf = orb_res["confidence"]
+            decision["reason"] = orb_res["reason"]
+        elif not orb_res.get("is_active_window", True):
+            # Outside 9:45 AM - 11:30 AM EST: refuse entries to avoid low-volume chop
+            return
 
     # Opposite-signal exit (flatten before considering a reversal next tick).
     # In live mode, DO NOT abort on 1-second micro-tick noise!
