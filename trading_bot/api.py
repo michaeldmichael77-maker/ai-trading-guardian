@@ -11,6 +11,7 @@ Orchestrates the Hive-Mind ensemble behind a stack of risk governors:
 """
 
 import collections
+from datetime import datetime
 import os
 import threading
 import time
@@ -816,6 +817,7 @@ def _auto_end_trading_day():
 
 
 def market_scheduler_loop():
+    from datetime import datetime
     import zoneinfo
     ny_tz = zoneinfo.ZoneInfo("America/New_York")
     while True:
