@@ -139,7 +139,7 @@ portfolio = Portfolio(balance=config.INITIAL_BALANCE)
 def get_active_price(symbol):
     if broker.is_live():
         return _live_market.get_price(symbol)
-    return _sim_market.get_price(symbol)
+    return market.get_price(symbol)
 
 
 def seed_futures_buffers():
@@ -266,10 +266,16 @@ _sim_adapter = SimulatorAdapter(market, portfolio, bot_state["last_prices"],
                                 logger=log)
 broker = BrokerManager(_sim_adapter, notifier=notifier, logger=log)
 # Honor the startup trading mode from config/env (defaults to safe "sim").
-if config.TRADING_MODE in ("paper", "live"):
+if config.TRADING_MODE in ("paper", "live", "topstep"):
     _ok, _info = broker.switch(config.TRADING_MODE)
     if _ok and broker.is_live():
-        portfolio.balance = float(_info.get("cash", portfolio.balance) or portfolio.balance)
+        bal = float(_info.get("cash", portfolio.balance) or portfolio.balance)
+        portfolio.balance = bal
+        portfolio.starting_balance = bal
+        portfolio.peak_equity = bal
+        portfolio.max_drawdown = 0.0
+        if config.TRADING_MODE == "topstep":
+            seed_futures_buffers()
     if not _ok:
         log(f"Startup broker mode '{config.TRADING_MODE}' not active: "
             f"{_info.get('error')}  (staying on simulator)")
@@ -817,6 +823,8 @@ def _auto_end_trading_day():
 
 
 def market_scheduler_loop():
+    if "PYTEST_CURRENT_TEST" in os.environ:
+        return
     from datetime import datetime
     import zoneinfo
     ny_tz = zoneinfo.ZoneInfo("America/New_York")
@@ -827,7 +835,9 @@ def market_scheduler_loop():
             h = now_dt.hour
             m = now_dt.minute
 
-            if weekday < 5 and broker.is_live():
+            if weekday < 5:
+                if not broker.is_live() and getattr(config, "TOPSTEP_API_KEY", None):
+                    broker.switch("topstep")
                 # 9:28 AM - 9:30 AM EST: Auto-start
                 if h == 9 and 28 <= m < 30 and not bot_state["is_running"] and not daily_governor.active:
                     _auto_start_trading_day()
@@ -840,7 +850,9 @@ def market_scheduler_loop():
 
 
 threading.Thread(target=bot_loop, daemon=True).start()
-threading.Thread(target=market_scheduler_loop, daemon=True).start()
+import sys
+if not any("pytest" in m for m in sys.modules) and not any("pytest" in a for a in sys.argv):
+    threading.Thread(target=market_scheduler_loop, daemon=True).start()
 
 
 # --------------------------------------------------------------------------- #

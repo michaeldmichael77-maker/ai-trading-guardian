@@ -15,6 +15,8 @@ services:
         sync: false          # you set this secret in the Render dashboard
       - key: GUARDIAN_SECRET
         generateValue: true  # Render generates a random signing secret
+      - key: GUARDIAN_TRADING_MODE
+        value: "topstep"     # Default to Topstep futures on boot
       # --- Optional: set these in the Render dashboard when you're ready ---
       # ALPACA_API_KEY_ID      (your Alpaca key)
       # ALPACA_API_SECRET_KEY  (your Alpaca secret)
